@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Скринсейвер для e-ink.
+    Белый фон + чёрный текст = максимальный контраст на e-ink.
+    touchInterceptor поглощает все касания.
+    Разблокировка только через датчик отпечатка.
+-->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/touchInterceptor"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF"
+    android:clickable="true"
+    android:focusable="true">
+
+    <!-- Часы (смещаются при обновлении для антигостинга) -->
+    <LinearLayout
+        android:id="@+id/clockContainer"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:gravity="center"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/clockText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="00:00"
+            android:textSize="96sp"
+            android:textColor="#000000"
+            android:fontFamily="sans-serif-light"
+            android:letterSpacing="0.05"
+            android:includeFontPadding="false" />
+
+        <TextView
+            android:id="@+id/dateText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="20sp"
+            android:textColor="#333333"
+            android:fontFamily="sans-serif"
+            android:layout_marginTop="8dp"
+            android:includeFontPadding="false" />
+
+    </LinearLayout>
+
+    <!-- Подсказка -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginBottom="48dp"
+        android:text="Приложите палец для разблокировки"
+        android:textSize="13sp"
+        android:textColor="#AAAAAA" />
+
+</FrameLayout>

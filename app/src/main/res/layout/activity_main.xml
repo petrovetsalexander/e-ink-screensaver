@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF"
+    android:padding="24dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="E-Ink Скринсейвер"
+            android:textSize="24sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Часы на заблокированном экране\nОптимизировано для e-ink дисплеев"
+            android:textSize="14sp"
+            android:textColor="#666666"
+            android:layout_marginBottom="24dp" />
+
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Статус: выключен"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/toggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Включить скринсейвер"
+            android:textSize="16sp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- Разрешения -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Разрешения"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/permissionStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Проверка..."
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/btnGrantNotification"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Разрешить уведомления"
+            android:textSize="14sp"
+            android:layout_marginBottom="8dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <Button
+            android:id="@+id/btnGrantFullScreen"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Разрешить полноэкранные уведомления"
+            android:textSize="14sp"
+            android:layout_marginBottom="32dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <!-- Интервал -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Интервал обновления часов"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Реже = меньше обновлений e-ink = дольше батарея"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginBottom="8dp" />
+
+        <RadioGroup
+            android:id="@+id/intervalGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp">
+
+            <RadioButton
+                android:id="@+id/radio1min"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Каждую минуту"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:paddingVertical="4dp" />
+
+            <RadioButton
+                android:id="@+id/radio2min"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Каждые 2 минуты"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:paddingVertical="4dp" />
+
+            <RadioButton
+                android:id="@+id/radio5min"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Каждые 5 минут"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:paddingVertical="4dp" />
+
+        </RadioGroup>
+
+        <!-- Доп. настройки -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Дополнительно"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbBrightness"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Отключать подсветку (frontlight)"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <CheckBox
+            android:id="@+id/cbShowDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Показывать дату"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="32dp"
+            android:text="Как это работает:\n\n• Кнопка питания → сервис захватывает WakeLock и показывает часы через полноэкранное уведомление (как будильник)\n• Brightness=0 — подсветка не мигает, e-ink выполняет refresh\n• WakeLock истекает → экран спит, e-ink сохраняет часы\n• При пробуждении часы уже видны, обновляются по интервалу\n• Позиция смещается для предотвращения гостинга\n• Разблокировка: палец на датчике → мгновенный unlock с вибрацией (polling 300ms)\n\nВажно: убедитесь что канал «Часы на экране блокировки» включен в настройках уведомлений"
+            android:textSize="13sp"
+            android:textColor="#666666"
+            android:lineSpacingMultiplier="1.3" />
+
+    </LinearLayout>
+</ScrollView>
