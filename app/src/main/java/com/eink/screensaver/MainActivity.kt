@@ -1,219 +1,226 @@
 package com.eink.screensaver
 
-import android.Manifest
-import android.app.NotificationManager
 import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
+import android.os.Handler
+import android.os.Looper
+import android.view.Gravity
 import android.widget.Button
-import android.widget.CheckBox
-import android.widget.RadioButton
-import android.widget.RadioGroup
+import android.widget.EditText
+import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.TextView
 import android.widget.Toast
-import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import org.json.JSONObject
 
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var toggleButton: Button
-    private lateinit var statusText: TextView
-    private lateinit var intervalGroup: RadioGroup
-    private lateinit var radio1min: RadioButton
-    private lateinit var radio2min: RadioButton
-    private lateinit var radio5min: RadioButton
-    private lateinit var cbBrightness: CheckBox
-    private lateinit var cbShowDate: CheckBox
-    private lateinit var permissionStatusText: TextView
-    private lateinit var btnGrantNotification: Button
-    private lateinit var btnGrantFullScreen: Button
-
-    private val notificationPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) {
-        updateUI()
-    }
-
-    private val fullScreenPermissionLauncher = registerForActivityResult(
-        ActivityResultContracts.StartActivityForResult()
-    ) {
-        updateUI()
-    }
+    private lateinit var notesListContainer: LinearLayout
+    private lateinit var etNewNote: EditText
+    private lateinit var btnAddNote: Button
+    private lateinit var btnSync: ImageButton
+    private val handler = Handler(Looper.getMainLooper())
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        toggleButton = findViewById(R.id.toggleButton)
-        statusText = findViewById(R.id.statusText)
-        intervalGroup = findViewById(R.id.intervalGroup)
-        radio1min = findViewById(R.id.radio1min)
-        radio2min = findViewById(R.id.radio2min)
-        radio5min = findViewById(R.id.radio5min)
-        cbBrightness = findViewById(R.id.cbBrightness)
-        cbShowDate = findViewById(R.id.cbShowDate)
-        permissionStatusText = findViewById(R.id.permissionStatusText)
-        btnGrantNotification = findViewById(R.id.btnGrantNotification)
-        btnGrantFullScreen = findViewById(R.id.btnGrantFullScreen)
+        notesListContainer = findViewById(R.id.notesListContainer)
+        etNewNote = findViewById(R.id.etNewNote)
+        btnAddNote = findViewById(R.id.btnAddNote)
+        btnSync = findViewById(R.id.btnSync)
 
-        loadSettings()
+        findViewById<ImageButton>(R.id.btnSettings).setOnClickListener {
+            startActivity(Intent(this, SettingsActivity::class.java))
+        }
 
-        toggleButton.setOnClickListener { toggleService() }
+        btnSync.setOnClickListener { performSync() }
 
-        intervalGroup.setOnCheckedChangeListener { _, checkedId ->
-            val minutes = when (checkedId) {
-                R.id.radio1min -> 1
-                R.id.radio2min -> 2
-                R.id.radio5min -> 5
-                else -> 1
+        btnAddNote.setOnClickListener {
+            val text = etNewNote.text.toString().trim()
+            if (text.isNotBlank()) {
+                addNote(text)
+                etNewNote.text.clear()
             }
-            PrefsManager.setUpdateIntervalMinutes(this, minutes)
         }
+    }
 
-        cbBrightness.setOnCheckedChangeListener { _, isChecked ->
-            PrefsManager.setBrightnessOff(this, isChecked)
-        }
+    private fun performSync() {
+        btnSync.isEnabled = false
+        Toast.makeText(this, "\u0421\u0438\u043D\u0445\u0440\u043E\u043D\u0438\u0437\u0430\u0446\u0438\u044F...", Toast.LENGTH_SHORT).show()
+        val ctx = applicationContext
+        kotlin.concurrent.thread {
+            val results = mutableListOf<String>()
 
-        cbShowDate.setOnCheckedChangeListener { _, isChecked ->
-            PrefsManager.setShowDate(this, isChecked)
-        }
+            // Weather
+            val city = PrefsManager.getWeatherCity(ctx)
+            val apiKey = PrefsManager.getWeatherApiKey(ctx)
+            if (city.isNotBlank() && apiKey.isNotBlank()) {
+                val weather = WeatherFetcher.fetch(city, apiKey)
+                if (weather != null) {
+                    PrefsManager.setWeatherCache(ctx, weather.toJson())
+                    results.add("\u041F\u043E\u0433\u043E\u0434\u0430 \u2713")
+                } else {
+                    results.add("\u041F\u043E\u0433\u043E\u0434\u0430 \u2717")
+                }
+            }
 
-        btnGrantNotification.setOnClickListener {
-            requestNotificationPermission()
-        }
+            // News
+            val rssUrl = PrefsManager.getNewsRssUrl(ctx)
+            if (rssUrl.isNotBlank()) {
+                val titles = NewsFetcher.fetch(rssUrl)
+                if (titles != null && titles.isNotEmpty()) {
+                    PrefsManager.setNewsCache(ctx, NewsFetcher.titlesToJson(titles))
+                    results.add("\u041D\u043E\u0432\u043E\u0441\u0442\u0438 \u2713")
+                } else {
+                    results.add("\u041D\u043E\u0432\u043E\u0441\u0442\u0438 \u2717")
+                }
+            }
 
-        btnGrantFullScreen.setOnClickListener {
-            requestFullScreenPermission()
+            // Bookmate
+            val userId = PrefsManager.getBookmateUserId(ctx)
+            if (userId.isNotBlank()) {
+                val book = BookmateFetcher.fetch(userId)
+                if (book != null) {
+                    PrefsManager.setBookmateCache(ctx, book.toJson())
+                    results.add("\u041A\u043D\u0438\u0433\u0430 \u2713")
+                    // Download cover
+                    if (book.coverUrl.isNotBlank()) {
+                        val bitmap = ImageCache.downloadAndCache(ctx, book.coverUrl)
+                        if (bitmap != null) {
+                            results.add("\u041E\u0431\u043B\u043E\u0436\u043A\u0430 \u2713")
+                        } else {
+                            results.add("\u041E\u0431\u043B\u043E\u0436\u043A\u0430 \u2717")
+                        }
+                    }
+                } else {
+                    results.add("\u041A\u043D\u0438\u0433\u0430 \u2717")
+                }
+            }
+
+            val message = if (results.isEmpty()) {
+                "\u041D\u0435\u0442 \u043D\u0430\u0441\u0442\u0440\u043E\u0435\u043D\u043D\u044B\u0445 \u0438\u0441\u0442\u043E\u0447\u043D\u0438\u043A\u043E\u0432"
+            } else {
+                results.joinToString(", ")
+            }
+
+            handler.post {
+                btnSync.isEnabled = true
+                Toast.makeText(this@MainActivity, message, Toast.LENGTH_LONG).show()
+            }
         }
     }
 
     override fun onResume() {
         super.onResume()
-        updateUI()
+        refreshNotesList()
     }
 
-    private fun loadSettings() {
-        when (PrefsManager.getUpdateIntervalMinutes(this)) {
-            1 -> radio1min.isChecked = true
-            2 -> radio2min.isChecked = true
-            5 -> radio5min.isChecked = true
-        }
-        cbBrightness.isChecked = PrefsManager.isBrightnessOff(this)
-        cbShowDate.isChecked = PrefsManager.isShowDate(this)
-    }
+    // ════════ Notes ════════
 
-    private fun hasNotificationPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) ==
-                    PackageManager.PERMISSION_GRANTED
-        } else true
-    }
-
-    /**
-     * На Android 14+ USE_FULL_SCREEN_INTENT требует отдельного разрешения
-     * через настройки уведомлений приложения.
-     */
-    private fun hasFullScreenPermission(): Boolean {
-        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            val nm = getSystemService(NotificationManager::class.java)
-            nm.canUseFullScreenIntent()
-        } else {
-            true // До Android 14 разрешение не требуется
+    private fun getNotesArray(): JSONArray {
+        return try {
+            JSONArray(PrefsManager.getNotesJson(this))
+        } catch (e: Exception) {
+            JSONArray()
         }
     }
 
-    private fun updateUI() {
-        val isEnabled = PrefsManager.isEnabled(this)
-        val hasNotif = hasNotificationPermission()
-        val hasFullScreen = hasFullScreenPermission()
-        val allPermissions = hasNotif && hasFullScreen
+    private fun saveNotesArray(arr: JSONArray) {
+        PrefsManager.setNotesJson(this, arr.toString())
+    }
 
-        val notifMark = if (hasNotif) "✓" else "✗"
-        val fsMark = if (hasFullScreen) "✓" else "✗"
-        permissionStatusText.text =
-            "Уведомления: $notifMark\nПолноэкранные уведомления: $fsMark"
+    private fun addNote(text: String) {
+        val arr = getNotesArray()
+        val note = JSONObject()
+        note.put("id", System.currentTimeMillis())
+        note.put("text", text)
+        note.put("completed", false)
+        arr.put(note)
+        saveNotesArray(arr)
+        refreshNotesList()
+    }
 
-        btnGrantNotification.isEnabled = !hasNotif
-        btnGrantFullScreen.isEnabled = !hasFullScreen
-        toggleButton.isEnabled = allPermissions
-
-        if (isEnabled) {
-            toggleButton.text = "Выключить скринсейвер"
-            statusText.text = "Статус: активен"
-            statusText.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
-        } else {
-            toggleButton.text = "Включить скринсейвер"
-            statusText.text = if (allPermissions) "Статус: выключен" else "Статус: нужны разрешения"
-            statusText.setTextColor(ContextCompat.getColor(this, android.R.color.darker_gray))
+    private fun toggleNoteCompleted(index: Int) {
+        val arr = getNotesArray()
+        if (index < arr.length()) {
+            val note = arr.getJSONObject(index)
+            note.put("completed", !note.optBoolean("completed", false))
+            saveNotesArray(arr)
+            refreshNotesList()
         }
     }
 
-    private fun toggleService() {
-        val isEnabled = PrefsManager.isEnabled(this)
-        if (isEnabled) {
-            PrefsManager.setEnabled(this, false)
-            BootReceiver.stopService(this)
-            Toast.makeText(this, "Скринсейвер выключен", Toast.LENGTH_SHORT).show()
-        } else {
-            PrefsManager.setEnabled(this, true)
-            BootReceiver.startService(this)
-            Toast.makeText(this, "Скринсейвер включен", Toast.LENGTH_SHORT).show()
-        }
-        updateUI()
-    }
-
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
-        }
-    }
-
-    private fun requestFullScreenPermission() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
-            // Способ 1: прямой intent с URI (стандартный Android 14)
-            try {
-                val intent = Intent(
-                    Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT,
-                    Uri.parse("package:$packageName")
-                )
-                fullScreenPermissionLauncher.launch(intent)
-                return
-            } catch (_: Exception) {}
-
-            // Способ 2: без URI
-            try {
-                val intent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT)
-                fullScreenPermissionLauncher.launch(intent)
-                return
-            } catch (_: Exception) {}
-
-            // Способ 3: настройки уведомлений приложения (fallback)
-            try {
-                val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                    putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                }
-                fullScreenPermissionLauncher.launch(intent)
-                return
-            } catch (_: Exception) {}
-
-            // Способ 4: общие настройки приложения (последний fallback)
-            try {
-                val intent = Intent(
-                    Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                    Uri.parse("package:$packageName")
-                )
-                fullScreenPermissionLauncher.launch(intent)
-            } catch (_: Exception) {
-                Toast.makeText(
-                    this,
-                    "Откройте Настройки → Приложения → E-Ink Скринсейвер → Уведомления",
-                    Toast.LENGTH_LONG
-                ).show()
+    private fun deleteNote(index: Int) {
+        val arr = getNotesArray()
+        if (index < arr.length()) {
+            val newArr = JSONArray()
+            for (i in 0 until arr.length()) {
+                if (i != index) newArr.put(arr.getJSONObject(i))
             }
+            saveNotesArray(newArr)
+            refreshNotesList()
+        }
+    }
+
+    @Suppress("SetTextI18n")
+    private fun refreshNotesList() {
+        notesListContainer.removeAllViews()
+        val arr = getNotesArray()
+        for (i in 0 until arr.length()) {
+            val note = arr.getJSONObject(i)
+            val text = note.optString("text", "")
+            val completed = note.optBoolean("completed", false)
+
+            val row = LinearLayout(this).apply {
+                orientation = LinearLayout.HORIZONTAL
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.MATCH_PARENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply {
+                    bottomMargin = 4
+                }
+                gravity = Gravity.CENTER_VERTICAL
+            }
+
+            val label = TextView(this).apply {
+                this.text = text
+                textSize = 14f
+                setTextColor(if (completed) 0xFF888888.toInt() else 0xFF000000.toInt())
+                layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                if (completed) {
+                    paintFlags = paintFlags or android.graphics.Paint.STRIKE_THRU_TEXT_FLAG
+                }
+            }
+
+            val btnComplete = Button(this).apply {
+                this.text = if (completed) "\u21A9" else "\u2713"
+                textSize = 14f
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = 4 }
+                val idx = i
+                setOnClickListener { toggleNoteCompleted(idx) }
+            }
+
+            val btnDelete = Button(this).apply {
+                this.text = "\u2717"
+                textSize = 14f
+                layoutParams = LinearLayout.LayoutParams(
+                    LinearLayout.LayoutParams.WRAP_CONTENT,
+                    LinearLayout.LayoutParams.WRAP_CONTENT
+                ).apply { marginStart = 4 }
+                val idx = i
+                setOnClickListener { deleteNote(idx) }
+            }
+
+            row.addView(label)
+            row.addView(btnComplete)
+            row.addView(btnDelete)
+            notesListContainer.addView(row)
         }
     }
 }
