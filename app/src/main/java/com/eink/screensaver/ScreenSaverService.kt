@@ -20,41 +20,6 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 
-/**
- * Foreground-сервис, запускающий LockScreenActivity через fullScreenIntent.
- *
- * ПРОБЛЕМА: Android 10+ запрещает startActivity() из фоновых процессов.
- *   Даже foreground service на Android 14 не может стартовать Activity,
- *   если приложение не в foreground.
- *
- * РЕШЕНИЕ: fullScreenIntent в notification — единственный одобренный Google
- *   способ показать UI на lockscreen из background (так работают будильники,
- *   входящие звонки, таймеры). Система ГАРАНТИРУЕТ показ Activity.
- *
- * WORKFLOW:
- *
- *   SCREEN_OFF
- *     → acquireWakeLock (5 сек, чтобы e-ink успел refresh)
- *     → postFullScreenNotification()
- *       → fullScreenIntent = PendingIntent → LockScreenActivity
- *       → Система показывает Activity поверх lockscreen
- *     → LockScreenActivity: brightness=0, drawClock
- *     → E-ink refresh → WakeLock timeout → экран спит, часы видны
- *
- *   [Device sleeping — zero CPU usage, e-ink retains image]
- *
- *   AlarmManager fires (every 1/2/5 min)
- *     → Brief WakeLock (3s) → re-post notification → update clock
- *     → WakeLock expires → sleep again
- *
- *   SCREEN_ON
- *     → LockScreenActivity.onResume() → updateClock, start unlock polling
- *
- *   FINGERPRINT / UNLOCK
- *     → Система обрабатывает fingerprint нативно (hardware-level)
- *     → LockScreenActivity polling isDeviceLocked каждые 1000ms
- *     → isDeviceLocked==false → vibrate → finish → cancel alarm
- */
 class ScreenSaverService : Service() {
 
     companion object {
@@ -70,6 +35,11 @@ class ScreenSaverService : Service() {
         private const val ALARM_WAKELOCK_TIMEOUT_MS = 3_000L
         private const val ACTION_UPDATE_CLOCK = "com.eink.screensaver.ACTION_UPDATE_CLOCK"
         private const val ALARM_REQUEST_CODE = 2001
+
+        private const val ACTION_FETCH_DATA = "com.eink.screensaver.ACTION_FETCH_DATA"
+        private const val FETCH_REQUEST_CODE = 2002
+        private const val FETCH_WAKELOCK_TIMEOUT_MS = 20_000L
+        private const val BOOKMATE_INTERVAL_MIN = 60
     }
 
     private lateinit var powerManager: PowerManager
@@ -78,6 +48,7 @@ class ScreenSaverService : Service() {
     private lateinit var alarmManager: AlarmManager
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
+    private var fetchWakeLock: PowerManager.WakeLock? = null
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -88,15 +59,11 @@ class ScreenSaverService : Service() {
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     Log.d(TAG, "══ SCREEN_ON ══")
-                    // НЕ перевыпускаем fullScreenIntent здесь —
-                    // это прерывает fingerprint-аутентификацию, которую keyguard
-                    // начинает сразу при касании боковой кнопки (wake + scan).
-                    // Activity выживает между screen off/on (noHistory убран),
-                    // поэтому повторный запуск не нужен.
                 }
                 Intent.ACTION_USER_PRESENT -> {
                     Log.d(TAG, "══ USER_PRESENT ══")
                     cancelClockAlarm()
+                    cancelDataFetchAlarm()
                     cancelLockscreenNotification()
                     releaseWakeLock()
                 }
@@ -117,7 +84,6 @@ class ScreenSaverService : Service() {
         startForeground(NOTIFICATION_ID, buildPersistentNotification())
         registerScreenReceiver()
 
-        // Если сервис стартует, а экран уже выключен
         if (!powerManager.isInteractive) {
             Log.d(TAG, "Service started with screen OFF → trigger lockscreen")
             onScreenOff()
@@ -130,6 +96,7 @@ class ScreenSaverService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 cancelClockAlarm()
+                cancelDataFetchAlarm()
                 cancelLockscreenNotification()
                 sendBroadcast(Intent(LockScreenActivity.ACTION_FINISH).setPackage(packageName))
                 releaseWakeLock()
@@ -141,6 +108,11 @@ class ScreenSaverService : Service() {
                 onClockAlarmFired()
                 return START_STICKY
             }
+            ACTION_FETCH_DATA -> {
+                Log.d(TAG, "AlarmManager → fetch data")
+                onDataFetchAlarmFired()
+                return START_STICKY
+            }
         }
         return START_STICKY
     }
@@ -148,8 +120,10 @@ class ScreenSaverService : Service() {
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
         cancelClockAlarm()
+        cancelDataFetchAlarm()
         cancelLockscreenNotification()
         releaseWakeLock()
+        releaseFetchWakeLock()
         unregisterScreenReceiver()
         Log.d(TAG, "Service destroyed")
         super.onDestroy()
@@ -164,21 +138,12 @@ class ScreenSaverService : Service() {
 
         handler.postDelayed({
             postFullScreenNotification()
-            // Schedule periodic clock updates while locked
             scheduleClockAlarm()
         }, LAUNCH_DELAY_MS)
 
-        // WakeLock has a 5s timeout — enough for e-ink to complete refresh,
-        // then CPU sleeps. AlarmManager handles periodic updates.
+        triggerDataFetchIfStale()
     }
 
-    /**
-     * Публикуем notification с fullScreenIntent.
-     * На заблокированном экране система АВТОМАТИЧЕСКИ запускает
-     * fullScreenIntent Activity вместо показа notification.
-     * Это единственный легальный способ показать Activity из background
-     * на lock screen (Android 10+).
-     */
     private fun postFullScreenNotification() {
         val fullScreenIntent = Intent(this, LockScreenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -230,6 +195,16 @@ class ScreenSaverService : Service() {
         wakeLock = null
     }
 
+    private fun releaseFetchWakeLock() {
+        fetchWakeLock?.let {
+            if (it.isHeld) {
+                it.release()
+                Log.d(TAG, "Fetch WakeLock released")
+            }
+        }
+        fetchWakeLock = null
+    }
+
     // ════════ AlarmManager for periodic clock updates ════════
 
     private fun getAlarmPendingIntent(): PendingIntent {
@@ -248,7 +223,6 @@ class ScreenSaverService : Service() {
         val pi = getAlarmPendingIntent()
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
-            // SCHEDULE_EXACT_ALARM not granted — fall back to inexact alarm
             alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
             Log.d(TAG, "Clock alarm scheduled (inexact) in ${intervalMs / 1000}s")
         } else {
@@ -263,7 +237,6 @@ class ScreenSaverService : Service() {
     }
 
     private fun onClockAlarmFired() {
-        // Acquire a short WakeLock for the e-ink refresh
         releaseWakeLock()
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
@@ -271,11 +244,120 @@ class ScreenSaverService : Service() {
         )
         wakeLock?.acquire(ALARM_WAKELOCK_TIMEOUT_MS)
 
-        // Re-post notification to update the clock
         postFullScreenNotification()
-
-        // Schedule the next alarm
         scheduleClockAlarm()
+    }
+
+    // ════════ Data Fetch Alarm ════════
+
+    private fun getDataFetchPendingIntent(): PendingIntent {
+        val intent = Intent(this, ScreenSaverService::class.java).apply {
+            action = ACTION_FETCH_DATA
+        }
+        return PendingIntent.getService(
+            this, FETCH_REQUEST_CODE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun scheduleDataFetchAlarm() {
+        val intervals = mutableListOf<Int>()
+        if (PrefsManager.isWeatherEnabled(this)) {
+            intervals.add(PrefsManager.getWeatherIntervalMin(this))
+        }
+        if (PrefsManager.isNewsEnabled(this)) {
+            intervals.add(PrefsManager.getNewsIntervalMin(this))
+        }
+        if (PrefsManager.isBookmateEnabled(this)) {
+            intervals.add(BOOKMATE_INTERVAL_MIN)
+        }
+        if (intervals.isEmpty()) return
+
+        val minInterval = intervals.min()
+        val intervalMs = minInterval * 60_000L
+        val triggerAt = SystemClock.elapsedRealtime() + intervalMs
+        alarmManager.setAndAllowWhileIdle(
+            AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, getDataFetchPendingIntent()
+        )
+        Log.d(TAG, "Data fetch alarm scheduled in ${minInterval}min")
+    }
+
+    private fun cancelDataFetchAlarm() {
+        alarmManager.cancel(getDataFetchPendingIntent())
+        Log.d(TAG, "Data fetch alarm cancelled")
+    }
+
+    private fun triggerDataFetchIfStale() {
+        val ctx = this
+        val hasAnyData = PrefsManager.isWeatherEnabled(ctx) ||
+                PrefsManager.isNewsEnabled(ctx) ||
+                PrefsManager.isBookmateEnabled(ctx)
+        if (!hasAnyData) return
+
+        onDataFetchAlarmFired()
+    }
+
+    private fun onDataFetchAlarmFired() {
+        releaseFetchWakeLock()
+        fetchWakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "EinkScreensaver:DataFetch"
+        )
+        fetchWakeLock?.acquire(FETCH_WAKELOCK_TIMEOUT_MS)
+
+        val ctx = applicationContext
+        kotlin.concurrent.thread {
+            try {
+                val now = System.currentTimeMillis()
+
+                // Weather
+                if (PrefsManager.isWeatherEnabled(ctx)) {
+                    val interval = PrefsManager.getWeatherIntervalMin(ctx) * 60_000L
+                    if (now - PrefsManager.getWeatherCacheTimeMs(ctx) > interval) {
+                        val data = WeatherFetcher.fetch(
+                            PrefsManager.getWeatherCity(ctx),
+                            PrefsManager.getWeatherApiKey(ctx)
+                        )
+                        if (data != null) {
+                            PrefsManager.setWeatherCache(ctx, data.toJson())
+                            Log.d(TAG, "Weather cache updated")
+                        }
+                    }
+                }
+
+                // News
+                if (PrefsManager.isNewsEnabled(ctx)) {
+                    val interval = PrefsManager.getNewsIntervalMin(ctx) * 60_000L
+                    if (now - PrefsManager.getNewsCacheTimeMs(ctx) > interval) {
+                        val titles = NewsFetcher.fetch(PrefsManager.getNewsRssUrl(ctx))
+                        if (titles != null) {
+                            PrefsManager.setNewsCache(ctx, NewsFetcher.titlesToJson(titles))
+                            Log.d(TAG, "News cache updated")
+                        }
+                    }
+                }
+
+                // Bookmate
+                if (PrefsManager.isBookmateEnabled(ctx)) {
+                    val interval = BOOKMATE_INTERVAL_MIN * 60_000L
+                    if (now - PrefsManager.getBookmateCacheTimeMs(ctx) > interval) {
+                        val book = BookmateFetcher.fetch(PrefsManager.getBookmateUserId(ctx))
+                        if (book != null) {
+                            PrefsManager.setBookmateCache(ctx, book.toJson())
+                            if (book.coverUrl.isNotBlank()) {
+                                ImageCache.downloadAndCache(ctx, book.coverUrl)
+                            }
+                            Log.d(TAG, "Bookmate cache updated")
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Data fetch error: ${e.message}")
+            } finally {
+                releaseFetchWakeLock()
+                scheduleDataFetchAlarm()
+            }
+        }
     }
 
     // ════════ Receivers ════════
@@ -301,7 +383,6 @@ class ScreenSaverService : Service() {
     // ════════ Notification channels ════════
 
     private fun createNotificationChannels() {
-        // Основной канал (persistent foreground notification)
         val mainChannel = NotificationChannel(
             CHANNEL_ID, "E-Ink Скринсейвер", NotificationManager.IMPORTANCE_LOW
         ).apply {
@@ -309,7 +390,6 @@ class ScreenSaverService : Service() {
             setShowBadge(false)
         }
 
-        // Канал для lockscreen (fullScreenIntent требует IMPORTANCE_HIGH)
         val lockChannel = NotificationChannel(
             CHANNEL_LOCKSCREEN_ID, "Часы на экране блокировки", NotificationManager.IMPORTANCE_HIGH
         ).apply {

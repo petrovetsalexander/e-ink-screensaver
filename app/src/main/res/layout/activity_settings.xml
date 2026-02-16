@@ -1,0 +1,452 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#FFFFFF">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="24dp">
+
+        <!-- Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:gravity="center_vertical"
+            android:layout_marginBottom="24dp">
+
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:src="@android:drawable/ic_menu_revert"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="Назад"
+                android:scaleType="centerInside"
+                android:layout_marginEnd="12dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Настройки"
+                android:textSize="24sp"
+                android:textStyle="bold"
+                android:textColor="#000000" />
+        </LinearLayout>
+
+        <!-- ═══════ Сервис ═══════ -->
+        <TextView
+            android:id="@+id/statusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Статус: выключен"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:layout_marginBottom="16dp" />
+
+        <Button
+            android:id="@+id/toggleButton"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="Включить скринсейвер"
+            android:textSize="16sp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- ═══════ Разрешения ═══════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Разрешения"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="8dp" />
+
+        <TextView
+            android:id="@+id/permissionStatusText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Проверка..."
+            android:textSize="14sp"
+            android:textColor="#333333"
+            android:layout_marginBottom="12dp" />
+
+        <Button
+            android:id="@+id/btnGrantNotification"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Разрешить уведомления"
+            android:textSize="14sp"
+            android:layout_marginBottom="8dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <Button
+            android:id="@+id/btnGrantFullScreen"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:text="Разрешить полноэкранные уведомления"
+            android:textSize="14sp"
+            android:layout_marginBottom="32dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <!-- ═══════ Интервал ═══════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Интервал обновления часов"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Реже = меньше обновлений e-ink = дольше батарея"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginBottom="8dp" />
+
+        <RadioGroup
+            android:id="@+id/intervalGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp">
+
+            <RadioButton
+                android:id="@+id/radio1min"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Каждую минуту"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:paddingVertical="4dp" />
+
+            <RadioButton
+                android:id="@+id/radio2min"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Каждые 2 минуты"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:paddingVertical="4dp" />
+
+            <RadioButton
+                android:id="@+id/radio5min"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Каждые 5 минут"
+                android:textSize="16sp"
+                android:textColor="#000000"
+                android:paddingVertical="4dp" />
+        </RadioGroup>
+
+        <!-- ═══════ Дополнительно ═══════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Дополнительно"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbBrightness"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Отключать подсветку (frontlight)"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <CheckBox
+            android:id="@+id/cbShowDate"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Показывать дату"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- ═══════ Модули на экране блокировки ═══════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Модули на экране блокировки"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="8dp" />
+
+        <CheckBox
+            android:id="@+id/cbBlockClock"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Часы"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <CheckBox
+            android:id="@+id/cbBlockWeather"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Погода"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <CheckBox
+            android:id="@+id/cbBlockNews"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Новости"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <CheckBox
+            android:id="@+id/cbBlockNotes"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Заметки"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <CheckBox
+            android:id="@+id/cbBlockBook"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Книга"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="true"
+            android:paddingVertical="4dp" />
+
+        <CheckBox
+            android:id="@+id/cbBookBackground"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Обложка книги как фон"
+            android:textSize="16sp"
+            android:textColor="#000000"
+            android:checked="false"
+            android:paddingVertical="4dp"
+            android:layout_marginBottom="32dp" />
+
+        <!-- ═══════ Погода ═══════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Погода"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="OpenWeatherMap (нужен бесплатный API ключ)"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etWeatherCity"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="Город (напр. Moscow)"
+            android:textSize="14sp"
+            android:inputType="text"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etWeatherApiKey"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="API ключ"
+            android:textSize="14sp"
+            android:inputType="textPassword"
+            android:layout_marginBottom="8dp" />
+
+        <RadioGroup
+            android:id="@+id/weatherIntervalGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <RadioButton
+                android:id="@+id/radioWeather30"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="30 мин"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/radioWeather60"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="60 мин"
+                android:textSize="14sp" />
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/btnSaveWeather"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:text="Сохранить погоду"
+            android:textSize="14sp"
+            android:layout_marginBottom="32dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <!-- ═══════ Новости ═══════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Новости"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="RSS лента (до 5 заголовков)"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etNewsRssUrl"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="URL RSS ленты"
+            android:textSize="14sp"
+            android:inputType="textUri"
+            android:layout_marginBottom="8dp" />
+
+        <RadioGroup
+            android:id="@+id/newsIntervalGroup"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:layout_marginBottom="8dp">
+
+            <RadioButton
+                android:id="@+id/radioNews5"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="5 мин"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/radioNews15"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="15 мин"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/radioNews30"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="30 мин"
+                android:textSize="14sp" />
+
+            <RadioButton
+                android:id="@+id/radioNews60"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="60 мин"
+                android:textSize="14sp" />
+        </RadioGroup>
+
+        <Button
+            android:id="@+id/btnSaveNews"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:text="Сохранить новости"
+            android:textSize="14sp"
+            android:layout_marginBottom="32dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <!-- ═══════ Bookmate ═══════ -->
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Bookmate"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:textColor="#000000"
+            android:layout_marginBottom="4dp" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Последняя книга из библиотеки"
+            android:textSize="12sp"
+            android:textColor="#888888"
+            android:layout_marginBottom="8dp" />
+
+        <EditText
+            android:id="@+id/etBookmateUserId"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:hint="User ID (напр. b1234567890)"
+            android:textSize="14sp"
+            android:inputType="text"
+            android:layout_marginBottom="8dp" />
+
+        <Button
+            android:id="@+id/btnSaveBookmate"
+            android:layout_width="match_parent"
+            android:layout_height="44dp"
+            android:text="Сохранить Bookmate"
+            android:textSize="14sp"
+            android:layout_marginBottom="32dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
+
+        <!-- Как это работает -->
+        <TextView
+            android:id="@+id/btnHowItWorks"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Как это работает?"
+            android:textSize="16sp"
+            android:textColor="#1976D2"
+            android:textStyle="bold"
+            android:background="?attr/selectableItemBackground"
+            android:padding="8dp"
+            android:layout_marginBottom="16dp" />
+
+        <!-- О приложении -->
+        <TextView
+            android:id="@+id/btnAbout"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="О приложении"
+            android:textSize="16sp"
+            android:textColor="#1976D2"
+            android:textStyle="bold"
+            android:background="?attr/selectableItemBackground"
+            android:padding="8dp"
+            android:layout_marginBottom="32dp" />
+
+    </LinearLayout>
+</ScrollView>
