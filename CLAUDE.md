@@ -24,15 +24,16 @@ The app uses a foreground service + fullScreenIntent pattern to display a clock 
 
 **Core flow:**
 1. `ScreenSaverService` (foreground service) listens for `SCREEN_OFF`
-2. On screen off: acquires a 5-second WakeLock, posts a notification with `fullScreenIntent`
+2. On screen off: acquires a `PARTIAL_WAKE_LOCK` (5s timeout), posts a notification with `fullScreenIntent`
 3. System launches `LockScreenActivity` over the lock screen
 4. Activity sets brightness to 0 (so e-ink refreshes without frontlight flash), draws the clock
-5. WakeLock expires, screen sleeps, e-ink retains the clock image
-6. Unlock detection: polls `KeyguardManager.isDeviceLocked` every 300ms (broadcast-based detection is unreliable)
+5. WakeLock expires, device sleeps, e-ink retains the clock image (zero power)
+6. `AlarmManager.setExactAndAllowWhileIdle()` fires every N minutes to update clock (brief 3s WakeLock per update)
+7. Unlock detection: polls `KeyguardManager.isDeviceLocked` every 1000ms only while screen is ON (broadcast-based detection is unreliable)
 
 **Key classes (all in `app/src/main/java/com/eink/screensaver/`):**
 
-- `ScreenSaverService` — Foreground service. Registers `SCREEN_OFF`/`SCREEN_ON`/`USER_PRESENT` receivers. Posts fullScreenIntent notifications to launch the lock screen activity. Manages WakeLock lifecycle.
+- `ScreenSaverService` — Foreground service. Registers `SCREEN_OFF`/`SCREEN_ON`/`USER_PRESENT` receivers. Posts fullScreenIntent notifications to launch the lock screen activity. Manages PARTIAL_WAKE_LOCK (5s timeout) and AlarmManager for periodic clock updates while device sleeps.
 - `LockScreenActivity` — Full-screen activity shown over lock screen. Renders clock with anti-ghosting offset (random ±40px shifts). Blocks all touch input; unlock only via fingerprint sensor. Polls for unlock state.
 - `MainActivity` — Settings UI. Toggle service on/off, configure update interval (1/2/5 min), brightness, date display. Handles runtime permission requests (notifications, full-screen intent on Android 14+).
 - `PrefsManager` — SharedPreferences wrapper (enabled state, update interval, brightness, show date).

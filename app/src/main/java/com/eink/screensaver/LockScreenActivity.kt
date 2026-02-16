@@ -34,7 +34,7 @@ import kotlin.random.Random
  *   Наша Activity НЕ блокирует датчик отпечатка — он работает "под" нами.
  *   
  *   Проблема: USER_PRESENT broadcast может не дойти до Activity.
- *   Решение: активный polling isDeviceLocked() каждые 300ms пока экран ON.
+ *   Решение: активный polling isDeviceLocked() каждые 1000ms пока экран ON.
  *   Это гарантирует мгновенную реакцию на fingerprint-разблокировку.
  *
  *   polling → isDeviceLocked==false → vibrateConfirmation(80ms) → finish()
@@ -47,9 +47,9 @@ class LockScreenActivity : AppCompatActivity() {
         private const val MAX_OFFSET_PX = 40
 
         // Интервал проверки статуса разблокировки (ms)
-        // 300ms — достаточно быстро для мгновенного ощущения,
-        // достаточно редко чтобы не жрать батарею
-        private const val UNLOCK_POLL_INTERVAL_MS = 300L
+        // 1000ms — polling только при включённом экране,
+        // достаточно быстро для responsive unlock detection
+        private const val UNLOCK_POLL_INTERVAL_MS = 1000L
     }
 
     private lateinit var clockText: TextView
@@ -65,7 +65,7 @@ class LockScreenActivity : AppCompatActivity() {
 
     /**
      * Главный механизм обнаружения разблокировки.
-     * Опрашиваем keyguardManager.isDeviceLocked каждые 300ms.
+     * Опрашиваем keyguardManager.isDeviceLocked каждые 1000ms.
      * Работает ВСЕГДА, независимо от broadcast'ов.
      */
     private val unlockPollRunnable = object : Runnable {
@@ -78,16 +78,6 @@ class LockScreenActivity : AppCompatActivity() {
             }
             // Устройство всё ещё заблокировано — проверяем снова
             handler.postDelayed(this, UNLOCK_POLL_INTERVAL_MS)
-        }
-    }
-
-    // ════════ Обновление часов ════════
-
-    private val clockRunnable = object : Runnable {
-        override fun run() {
-            updateClock()
-            val intervalMs = PrefsManager.getUpdateIntervalMinutes(this@LockScreenActivity) * 60_000L
-            handler.postDelayed(this, intervalMs)
         }
     }
 
@@ -109,16 +99,12 @@ class LockScreenActivity : AppCompatActivity() {
                     finish()
                 }
                 Intent.ACTION_SCREEN_OFF -> {
-                    Log.d(TAG, "SCREEN_OFF → stop polling, update clock once")
+                    Log.d(TAG, "SCREEN_OFF → stop polling")
                     stopUnlockPolling()
-                    stopClockTimer()
-                    // Обновляем часы — при следующем SCREEN_ON они будут актуальны
-                    updateClock()
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     Log.d(TAG, "SCREEN_ON → start polling, update clock")
                     updateClock()
-                    startClockTimer()
                     startUnlockPolling()
                 }
             }
@@ -157,8 +143,7 @@ class LockScreenActivity : AppCompatActivity() {
         @Suppress("DEPRECATION")
         window.addFlags(
             WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_FULLSCREEN or
-            WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
+            WindowManager.LayoutParams.FLAG_FULLSCREEN
         )
 
         // ─── Fullscreen / immersive ───
@@ -206,13 +191,11 @@ class LockScreenActivity : AppCompatActivity() {
         }
 
         updateClock()
-        startClockTimer()
         startUnlockPolling()
     }
 
     override fun onPause() {
         super.onPause()
-        stopClockTimer()
         // НЕ останавливаем polling в onPause —
         // на некоторых устройствах Activity может быть "paused"
         // но всё ещё видна на lockscreen
@@ -258,11 +241,8 @@ class LockScreenActivity : AppCompatActivity() {
 
     private fun cancelNotificationAndFinish() {
         stopUnlockPolling()
-        stopClockTimer()
         // Убираем fullscreen notification
         try {
-            val service = Intent(this, ScreenSaverService::class.java)
-            // Просто отменяем notification напрямую
             val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.cancel(ScreenSaverService.LOCKSCREEN_NOTIFICATION_ID)
         } catch (e: Exception) {
@@ -291,16 +271,6 @@ class LockScreenActivity : AppCompatActivity() {
     }
 
     // ════════ Clock ════════
-
-    private fun startClockTimer() {
-        handler.removeCallbacks(clockRunnable)
-        val intervalMs = PrefsManager.getUpdateIntervalMinutes(this) * 60_000L
-        handler.postDelayed(clockRunnable, intervalMs)
-    }
-
-    private fun stopClockTimer() {
-        handler.removeCallbacks(clockRunnable)
-    }
 
     private fun updateClock() {
         val now = Date()
