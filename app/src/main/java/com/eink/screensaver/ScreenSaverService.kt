@@ -1,6 +1,7 @@
 package com.eink.screensaver
 
 import android.annotation.SuppressLint
+import android.app.AlarmManager
 import android.app.KeyguardManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -16,6 +17,7 @@ import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
+import android.os.SystemClock
 import android.util.Log
 
 /**
@@ -39,13 +41,19 @@ import android.util.Log
  *     → LockScreenActivity: brightness=0, drawClock
  *     → E-ink refresh → WakeLock timeout → экран спит, часы видны
  *
+ *   [Device sleeping — zero CPU usage, e-ink retains image]
+ *
+ *   AlarmManager fires (every 1/2/5 min)
+ *     → Brief WakeLock (3s) → re-post notification → update clock
+ *     → WakeLock expires → sleep again
+ *
  *   SCREEN_ON
  *     → LockScreenActivity.onResume() → updateClock, start unlock polling
  *
  *   FINGERPRINT / UNLOCK
  *     → Система обрабатывает fingerprint нативно (hardware-level)
- *     → LockScreenActivity polling isDeviceLocked каждые 300ms
- *     → isDeviceLocked==false → vibrate → finish
+ *     → LockScreenActivity polling isDeviceLocked каждые 1000ms
+ *     → isDeviceLocked==false → vibrate → finish → cancel alarm
  */
 class ScreenSaverService : Service() {
 
@@ -58,11 +66,16 @@ class ScreenSaverService : Service() {
         const val ACTION_STOP = "com.eink.screensaver.ACTION_STOP"
 
         private const val LAUNCH_DELAY_MS = 200L
+        private const val WAKELOCK_TIMEOUT_MS = 5_000L
+        private const val ALARM_WAKELOCK_TIMEOUT_MS = 3_000L
+        private const val ACTION_UPDATE_CLOCK = "com.eink.screensaver.ACTION_UPDATE_CLOCK"
+        private const val ALARM_REQUEST_CODE = 2001
     }
 
     private lateinit var powerManager: PowerManager
     private lateinit var keyguardManager: KeyguardManager
     private lateinit var notificationManager: NotificationManager
+    private lateinit var alarmManager: AlarmManager
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
 
@@ -83,6 +96,7 @@ class ScreenSaverService : Service() {
                 }
                 Intent.ACTION_USER_PRESENT -> {
                     Log.d(TAG, "══ USER_PRESENT ══")
+                    cancelClockAlarm()
                     cancelLockscreenNotification()
                     releaseWakeLock()
                 }
@@ -97,6 +111,7 @@ class ScreenSaverService : Service() {
         powerManager = getSystemService(POWER_SERVICE) as PowerManager
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         notificationManager = getSystemService(NotificationManager::class.java)
+        alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
 
         createNotificationChannels()
         startForeground(NOTIFICATION_ID, buildPersistentNotification())
@@ -112,18 +127,27 @@ class ScreenSaverService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        if (intent?.action == ACTION_STOP) {
-            cancelLockscreenNotification()
-            sendBroadcast(Intent(LockScreenActivity.ACTION_FINISH).setPackage(packageName))
-            releaseWakeLock()
-            stopSelf()
-            return START_NOT_STICKY
+        when (intent?.action) {
+            ACTION_STOP -> {
+                cancelClockAlarm()
+                cancelLockscreenNotification()
+                sendBroadcast(Intent(LockScreenActivity.ACTION_FINISH).setPackage(packageName))
+                releaseWakeLock()
+                stopSelf()
+                return START_NOT_STICKY
+            }
+            ACTION_UPDATE_CLOCK -> {
+                Log.d(TAG, "AlarmManager → update clock")
+                onClockAlarmFired()
+                return START_STICKY
+            }
         }
         return START_STICKY
     }
 
     override fun onDestroy() {
         handler.removeCallbacksAndMessages(null)
+        cancelClockAlarm()
         cancelLockscreenNotification()
         releaseWakeLock()
         unregisterScreenReceiver()
@@ -140,11 +164,12 @@ class ScreenSaverService : Service() {
 
         handler.postDelayed({
             postFullScreenNotification()
+            // Schedule periodic clock updates while locked
+            scheduleClockAlarm()
         }, LAUNCH_DELAY_MS)
 
-        // WakeLock НЕ освобождаем по таймауту — держим экран "on" (с brightness=0)
-        // чтобы fingerprint sensor оставался активным.
-        // Освобождается в USER_PRESENT / onDestroy.
+        // WakeLock has a 5s timeout — enough for e-ink to complete refresh,
+        // then CPU sleeps. AlarmManager handles periodic updates.
     }
 
     /**
@@ -185,16 +210,14 @@ class ScreenSaverService : Service() {
 
     // ════════ WakeLock ════════
 
-    @SuppressLint("WakelockTimeout")
     private fun acquireWakeLock() {
         releaseWakeLock()
         wakeLock = powerManager.newWakeLock(
-            @Suppress("DEPRECATION")
-            PowerManager.FULL_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            PowerManager.PARTIAL_WAKE_LOCK,
             "EinkScreensaver:DrawClock"
         )
-        wakeLock?.acquire()
-        Log.d(TAG, "WakeLock acquired (until unlock)")
+        wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
+        Log.d(TAG, "WakeLock acquired (${WAKELOCK_TIMEOUT_MS}ms timeout)")
     }
 
     private fun releaseWakeLock() {
@@ -205,6 +228,54 @@ class ScreenSaverService : Service() {
             }
         }
         wakeLock = null
+    }
+
+    // ════════ AlarmManager for periodic clock updates ════════
+
+    private fun getAlarmPendingIntent(): PendingIntent {
+        val intent = Intent(this, ScreenSaverService::class.java).apply {
+            action = ACTION_UPDATE_CLOCK
+        }
+        return PendingIntent.getService(
+            this, ALARM_REQUEST_CODE, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+    }
+
+    private fun scheduleClockAlarm() {
+        val intervalMs = PrefsManager.getUpdateIntervalMinutes(this) * 60_000L
+        val triggerAt = SystemClock.elapsedRealtime() + intervalMs
+        val pi = getAlarmPendingIntent()
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            // SCHEDULE_EXACT_ALARM not granted — fall back to inexact alarm
+            alarmManager.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+            Log.d(TAG, "Clock alarm scheduled (inexact) in ${intervalMs / 1000}s")
+        } else {
+            alarmManager.setExactAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, triggerAt, pi)
+            Log.d(TAG, "Clock alarm scheduled (exact) in ${intervalMs / 1000}s")
+        }
+    }
+
+    private fun cancelClockAlarm() {
+        alarmManager.cancel(getAlarmPendingIntent())
+        Log.d(TAG, "Clock alarm cancelled")
+    }
+
+    private fun onClockAlarmFired() {
+        // Acquire a short WakeLock for the e-ink refresh
+        releaseWakeLock()
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.PARTIAL_WAKE_LOCK,
+            "EinkScreensaver:AlarmUpdate"
+        )
+        wakeLock?.acquire(ALARM_WAKELOCK_TIMEOUT_MS)
+
+        // Re-post notification to update the clock
+        postFullScreenNotification()
+
+        // Schedule the next alarm
+        scheduleClockAlarm()
     }
 
     // ════════ Receivers ════════
