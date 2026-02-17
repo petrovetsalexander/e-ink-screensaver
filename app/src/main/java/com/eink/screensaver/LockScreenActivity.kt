@@ -13,7 +13,6 @@ import android.os.Looper
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
-import android.text.SpannableString
 import android.text.Spanned
 import android.text.style.StrikethroughSpan
 import android.util.Log
@@ -29,19 +28,23 @@ import org.json.JSONArray
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlin.random.Random
 
 class LockScreenActivity : AppCompatActivity() {
 
     companion object {
         const val TAG = "LockScreenAct"
         const val ACTION_FINISH = "com.eink.screensaver.ACTION_FINISH_LOCKSCREEN"
-        private const val MAX_OFFSET_PX = 40
+        const val ACTION_UPDATE_DISPLAY = "com.eink.screensaver.ACTION_UPDATE_DISPLAY"
         private const val UNLOCK_POLL_INTERVAL_MS = 1000L
+
+        @Volatile
+        var isActive = false
+            private set
     }
 
     private lateinit var mainContainer: LinearLayout
     private lateinit var backgroundImage: ImageView
+    private lateinit var clockSection: LinearLayout
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
 
@@ -55,9 +58,8 @@ class LockScreenActivity : AppCompatActivity() {
     private lateinit var newsSection: FrameLayout
     private lateinit var newsText: TextView
 
-    // Notes
-    private lateinit var notesSection: FrameLayout
-    private lateinit var notesText: TextView
+    // Stickers
+    private lateinit var stickersSection: LinearLayout
 
     // Book
     private lateinit var bookSection: FrameLayout
@@ -105,6 +107,14 @@ class LockScreenActivity : AppCompatActivity() {
                     updateDisplay()
                     startUnlockPolling()
                 }
+                ScreenSaverService.ACTION_DATA_UPDATED -> {
+                    Log.d(TAG, "DATA_UPDATED → refresh display")
+                    updateDisplay()
+                }
+                ACTION_UPDATE_DISPLAY -> {
+                    Log.d(TAG, "UPDATE_DISPLAY → refresh display")
+                    updateDisplay()
+                }
             }
         }
     }
@@ -117,22 +127,21 @@ class LockScreenActivity : AppCompatActivity() {
 
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
 
+        // Brightness 0 prevents frontlight flash while e-ink still refreshes.
+        // Do NOT use setTurnScreenOn / FLAG_TURN_SCREEN_ON — those cause the system
+        // to activate the backlight at default brightness before the window's brightness
+        // override (0.0f) takes effect, resulting in a visible flash.
+        // The fullScreenIntent notification handles waking the display instead.
         window.attributes = window.attributes.apply {
-            screenBrightness = if (PrefsManager.isBrightnessOff(this@LockScreenActivity)) {
-                0.0f
-            } else {
-                -1.0f
-            }
+            screenBrightness = 0.0f
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
-            setTurnScreenOn(true)
         } else {
             @Suppress("DEPRECATION")
             window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
             )
         }
 
@@ -156,6 +165,7 @@ class LockScreenActivity : AppCompatActivity() {
 
         mainContainer = findViewById(R.id.mainContainer)
         backgroundImage = findViewById(R.id.backgroundImage)
+        clockSection = findViewById(R.id.clockSection)
         clockText = findViewById(R.id.clockText)
         dateText = findViewById(R.id.dateText)
 
@@ -167,8 +177,7 @@ class LockScreenActivity : AppCompatActivity() {
         newsSection = findViewById(R.id.newsSection)
         newsText = findViewById(R.id.newsText)
 
-        notesSection = findViewById(R.id.notesSection)
-        notesText = findViewById(R.id.notesText)
+        stickersSection = findViewById(R.id.stickersSection)
 
         bookSection = findViewById(R.id.bookSection)
         bookCoverImage = findViewById(R.id.bookCoverImage)
@@ -192,6 +201,7 @@ class LockScreenActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        isActive = true
         Log.d(TAG, "onResume")
 
         if (!keyguardManager.isDeviceLocked) {
@@ -215,6 +225,7 @@ class LockScreenActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        isActive = false
         handler.removeCallbacksAndMessages(null)
         unregisterReceivers()
         Log.d(TAG, "Activity destroyed")
@@ -289,14 +300,61 @@ class LockScreenActivity : AppCompatActivity() {
         }
     }
 
+    private fun getModuleView(key: String): View? = when (key) {
+        "clock" -> clockSection
+        "weather" -> weatherSection
+        "news" -> newsSection
+        "notes" -> stickersSection
+        "book" -> bookSection
+        else -> null
+    }
+
+    private fun reorderModules() {
+        val order = PrefsManager.getModulesOrder(this)
+        val moduleViews = order.mapNotNull { getModuleView(it) }
+
+        // Remove all module views from container
+        for (view in moduleViews) {
+            mainContainer.removeView(view)
+        }
+
+        // Re-add in saved order
+        for (view in moduleViews) {
+            mainContainer.addView(view)
+        }
+    }
+
+    private fun applyClockPosition() {
+        val position = PrefsManager.getClockPosition(this)
+        val gravity = if (position == "right") android.view.Gravity.END else android.view.Gravity.START
+
+        clockText.gravity = gravity
+        dateText.gravity = gravity
+
+        val lp = clockText.layoutParams as LinearLayout.LayoutParams
+        lp.gravity = gravity
+        clockText.layoutParams = lp
+
+        val dlp = dateText.layoutParams as LinearLayout.LayoutParams
+        dlp.gravity = gravity
+        dateText.layoutParams = dlp
+    }
+
     private fun updateDisplay() {
         val now = Date()
         val ctx = this
+
+        // Reorder modules according to saved order
+        reorderModules()
+
+        // Apply clock position (left/right)
+        applyClockPosition()
 
         // Clock
         if (PrefsManager.isBlockClockEnabled(ctx)) {
             val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
             clockText.text = timeFormat.format(now)
+            clockText.textSize = PrefsManager.getFontSizeClock(ctx).toFloat()
             clockText.visibility = View.VISIBLE
         } else {
             clockText.visibility = View.GONE
@@ -317,13 +375,15 @@ class LockScreenActivity : AppCompatActivity() {
             if (weatherJson.isNotBlank()) {
                 val weather = WeatherData.fromJson(weatherJson)
                 if (weather != null) {
+                    val weatherFontSize = PrefsManager.getFontSizeWeather(ctx).toFloat()
                     val icon = weatherIcon(weather.currentDesc)
                     val tempSign = if (weather.currentTemp > 0) "+" else ""
                     weatherCurrentText.text = "$icon ${tempSign}${weather.currentTemp}\u00B0C \u00B7 ${weather.currentDesc}"
+                    weatherCurrentText.textSize = weatherFontSize
 
                     val daySign = if (weather.dayTemp > 0) "+" else ""
                     val nightSign = if (weather.nightTemp > 0) "+" else ""
-                    weatherDayNightText.text = "\u2600\uFE0F \u0414\u0435\u043D\u044C: ${daySign}${weather.dayTemp}\u00B0 / \uD83C\uDF19 \u041D\u043E\u0447\u044C: ${nightSign}${weather.nightTemp}\u00B0"
+                    weatherDayNightText.text = "\u2600\uFE0F ${getString(R.string.weather_day)}: ${daySign}${weather.dayTemp}\u00B0 / \uD83C\uDF19 ${getString(R.string.weather_night)}: ${nightSign}${weather.nightTemp}\u00B0"
 
                     if (weather.forecast.isNotEmpty()) {
                         weatherForecastText.text = weather.forecast.joinToString(" \u00B7 ") { item ->
@@ -350,9 +410,43 @@ class LockScreenActivity : AppCompatActivity() {
         if (PrefsManager.isBlockNewsEnabled(ctx)) {
             val newsJson = PrefsManager.getNewsCacheJson(ctx)
             if (newsJson.isNotBlank()) {
-                val titles = NewsFetcher.titlesFromJson(newsJson)
-                if (titles.isNotEmpty()) {
-                    newsText.text = titles.joinToString("\n") { "\u2022 $it" }
+                var items = NewsFetcher.itemsFromJson(newsJson)
+                if (items.isNotEmpty()) {
+                    val displayCount = PrefsManager.getNewsDisplayCount(ctx)
+                    if (PrefsManager.isNewsShuffle(ctx)) {
+                        items = items.shuffled()
+                    }
+                    items = items.take(displayCount)
+                    val onlyHeader = PrefsManager.isNewsOnlyHeader(ctx)
+                    val headerSize = PrefsManager.getFontSizeNews(ctx).toFloat()
+                    val bodySize = PrefsManager.getFontSizeNewsBody(ctx).toFloat()
+                    if (onlyHeader) {
+                        newsText.text = items.joinToString("\n") { "\u2022 ${it.title}" }
+                        newsText.textSize = headerSize
+                    } else {
+                        val sb = android.text.SpannableStringBuilder()
+                        for ((i, item) in items.withIndex()) {
+                            if (i > 0) sb.append("\n\n")
+                            val titleStart = sb.length
+                            sb.append("\u2022 ${item.title}")
+                            sb.setSpan(
+                                android.text.style.RelativeSizeSpan(headerSize / bodySize),
+                                titleStart, sb.length,
+                                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            )
+                            sb.setSpan(
+                                android.text.style.StyleSpan(android.graphics.Typeface.BOLD),
+                                titleStart, sb.length,
+                                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            )
+                            if (item.body.isNotBlank()) {
+                                sb.append("\n")
+                                sb.append(item.body)
+                            }
+                        }
+                        newsText.text = sb
+                        newsText.textSize = bodySize
+                    }
                     newsSection.visibility = View.VISIBLE
                 } else {
                     newsSection.visibility = View.GONE
@@ -364,35 +458,45 @@ class LockScreenActivity : AppCompatActivity() {
             newsSection.visibility = View.GONE
         }
 
-        // Notes
+        // Stickers (two-column grid)
         if (PrefsManager.isBlockNotesEnabled(ctx)) {
-            val notesJson = PrefsManager.getNotesJson(ctx)
             try {
-                val arr = JSONArray(notesJson)
-                if (arr.length() > 0) {
-                    val sb = android.text.SpannableStringBuilder()
-                    for (i in 0 until arr.length()) {
-                        val note = arr.getJSONObject(i)
-                        val text = note.optString("text", "")
-                        val completed = note.optBoolean("completed", false)
-                        if (i > 0) sb.append("\n")
-                        val line = "\u2022 $text"
-                        val start = sb.length
-                        sb.append(line)
-                        if (completed) {
-                            sb.setSpan(StrikethroughSpan(), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                val stickersJson = PrefsManager.getStickersJson(ctx)
+                val allStickers = JSONArray(stickersJson)
+                val visibleStickers = (0 until allStickers.length())
+                    .map { allStickers.getJSONObject(it) }
+                    .filter { it.optBoolean("visible", true) }
+
+                if (visibleStickers.isNotEmpty()) {
+                    stickersSection.removeAllViews()
+                    val columns = PrefsManager.getNotesColumns(ctx).coerceIn(1, 3)
+                    val notesFontSize = PrefsManager.getFontSizeNotes(ctx).toFloat()
+                    for (i in visibleStickers.indices step columns) {
+                        val row = LinearLayout(ctx).apply {
+                            orientation = LinearLayout.HORIZONTAL
+                            layoutParams = LinearLayout.LayoutParams(
+                                LinearLayout.LayoutParams.MATCH_PARENT,
+                                LinearLayout.LayoutParams.WRAP_CONTENT
+                            ).apply { bottomMargin = 8 }
                         }
+                        for (col in 0 until columns) {
+                            if (i + col < visibleStickers.size) {
+                                row.addView(buildStickerView(visibleStickers[i + col], notesFontSize))
+                            } else {
+                                row.addView(View(ctx), LinearLayout.LayoutParams(0, 0, 1f))
+                            }
+                        }
+                        stickersSection.addView(row)
                     }
-                    notesText.text = sb
-                    notesSection.visibility = View.VISIBLE
+                    stickersSection.visibility = View.VISIBLE
                 } else {
-                    notesSection.visibility = View.GONE
+                    stickersSection.visibility = View.GONE
                 }
             } catch (e: Exception) {
-                notesSection.visibility = View.GONE
+                stickersSection.visibility = View.GONE
             }
         } else {
-            notesSection.visibility = View.GONE
+            stickersSection.visibility = View.GONE
         }
 
         // Book
@@ -403,9 +507,13 @@ class LockScreenActivity : AppCompatActivity() {
                 val book = BookData.fromJson(bookJson)
                 if (book != null && book.title.isNotBlank()) {
                     if (PrefsManager.isBlockBookEnabled(ctx)) {
+                        val bookFontSize = PrefsManager.getFontSizeBook(ctx).toFloat()
                         bookTitleText.text = book.title
+                        bookTitleText.textSize = bookFontSize
                         bookAuthorText.text = book.author
+                        bookAuthorText.textSize = (bookFontSize - 1f).coerceAtLeast(8f)
                         bookAnnotationText.text = book.annotation
+                        bookAnnotationText.textSize = (bookFontSize - 2f).coerceAtLeast(8f)
                         bookSection.visibility = View.VISIBLE
                     } else {
                         bookSection.visibility = View.GONE
@@ -449,11 +557,59 @@ class LockScreenActivity : AppCompatActivity() {
             backgroundImage.visibility = View.GONE
         }
 
-        // Anti-ghosting offset on mainContainer
-        mainContainer.translationX = Random.nextInt(-MAX_OFFSET_PX, MAX_OFFSET_PX).toFloat()
-        mainContainer.translationY = Random.nextInt(-MAX_OFFSET_PX, MAX_OFFSET_PX).toFloat()
-
         Log.d(TAG, "Display updated: ${clockText.text}")
+    }
+
+    // ════════ Sticker view builder ════════
+
+    @Suppress("SetTextI18n")
+    private fun buildStickerView(sticker: org.json.JSONObject, notesFontSize: Float = 13f): FrameLayout {
+        val ctx = this
+        val frame = FrameLayout(ctx).apply {
+            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).apply {
+                marginStart = 4
+                marginEnd = 4
+            }
+            setBackgroundResource(R.drawable.section_border)
+            setPadding(10, 10, 10, 10)
+        }
+
+        val nameLabel = TextView(ctx).apply {
+            text = sticker.optString("name", "")
+            textSize = 12f
+            setTextColor(0xFF888888.toInt())
+        }
+        frame.addView(nameLabel)
+
+        val notes = sticker.optJSONArray("notes") ?: JSONArray()
+        if (notes.length() > 0) {
+            val sb = android.text.SpannableStringBuilder()
+            for (i in 0 until notes.length()) {
+                val note = notes.getJSONObject(i)
+                val text = note.optString("text", "")
+                val completed = note.optBoolean("completed", false)
+                if (i > 0) sb.append("\n")
+                val line = "\u2022 $text"
+                val start = sb.length
+                sb.append(line)
+                if (completed) {
+                    sb.setSpan(StrikethroughSpan(), start, sb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+                }
+            }
+            val notesView = TextView(ctx).apply {
+                this.text = sb
+                textSize = notesFontSize
+                setTextColor(0xFF000000.toInt())
+                layoutParams = FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT
+                ).apply { topMargin = 20 }
+                setLineSpacing(0f, 1.3f)
+            }
+            frame.addView(notesView)
+        }
+
+        return frame
     }
 
     // ════════ Receivers ════════
@@ -465,6 +621,8 @@ class LockScreenActivity : AppCompatActivity() {
             addAction(ACTION_FINISH)
             addAction(Intent.ACTION_SCREEN_ON)
             addAction(Intent.ACTION_SCREEN_OFF)
+            addAction(ScreenSaverService.ACTION_DATA_UPDATED)
+            addAction(ACTION_UPDATE_DISPLAY)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             registerReceiver(receiver, filter, Context.RECEIVER_EXPORTED)

@@ -8,7 +8,6 @@ object PrefsManager {
     private const val PREFS_NAME = "eink_screensaver_prefs"
     private const val KEY_ENABLED = "screensaver_enabled"
     private const val KEY_UPDATE_INTERVAL = "update_interval_minutes"
-    private const val KEY_BRIGHTNESS_OFF = "brightness_off"
     private const val KEY_SHOW_DATE = "show_date"
 
     // Weather
@@ -23,9 +22,17 @@ object PrefsManager {
     private const val KEY_NEWS_INTERVAL_MIN = "news_interval_min"
     private const val KEY_NEWS_CACHE_JSON = "news_cache_json"
     private const val KEY_NEWS_CACHE_TIME_MS = "news_cache_time_ms"
+    private const val KEY_NEWS_DISPLAY_COUNT = "news_display_count"
+    private const val KEY_NEWS_DOWNLOAD_COUNT = "news_download_count"
+    private const val KEY_NEWS_SHUFFLE = "news_shuffle"
+    private const val KEY_NEWS_ONLY_HEADER = "news_only_header"
+    private const val KEY_FONT_SIZE_NEWS_BODY = "font_size_news_body"
+    private const val KEY_NEWS_BODY_TAGS = "news_body_tags"
+    private const val DEFAULT_NEWS_BODY_TAGS = "rbc_news:full-text,description"
 
     // Notes
     private const val KEY_NOTES_JSON = "notes_json"
+    private const val KEY_STICKERS_JSON = "notes_stickers_json"
 
     // Bookmate
     private const val KEY_BOOKMATE_USER_ID = "bookmate_user_id"
@@ -40,6 +47,21 @@ object PrefsManager {
     private const val KEY_BLOCK_BOOK_ENABLED = "block_book_enabled"
     private const val KEY_BOOK_BACKGROUND_ENABLED = "book_background_enabled"
 
+    // Font sizes (sp values)
+    private const val KEY_FONT_SIZE_CLOCK = "font_size_clock"
+    private const val KEY_FONT_SIZE_WEATHER = "font_size_weather"
+    private const val KEY_FONT_SIZE_NEWS = "font_size_news"
+    private const val KEY_FONT_SIZE_NOTES = "font_size_notes"
+    private const val KEY_FONT_SIZE_BOOK = "font_size_book"
+
+    // Notes columns
+    private const val KEY_NOTES_COLUMNS = "notes_columns"
+
+    // Module order & clock position
+    private const val KEY_MODULES_ORDER = "modules_order"
+    private const val KEY_CLOCK_POSITION = "clock_position"
+    private const val DEFAULT_MODULES_ORDER = "clock,weather,news,notes,book"
+
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -53,18 +75,12 @@ object PrefsManager {
     }
 
     fun getUpdateIntervalMinutes(context: Context): Int =
-        prefs(context).getInt(KEY_UPDATE_INTERVAL, 1)
+        prefs(context).getInt(KEY_UPDATE_INTERVAL, 5)
 
     fun setUpdateIntervalMinutes(context: Context, minutes: Int) {
         prefs(context).edit().putInt(KEY_UPDATE_INTERVAL, minutes).apply()
     }
 
-    fun isBrightnessOff(context: Context): Boolean =
-        prefs(context).getBoolean(KEY_BRIGHTNESS_OFF, true)
-
-    fun setBrightnessOff(context: Context, off: Boolean) {
-        prefs(context).edit().putBoolean(KEY_BRIGHTNESS_OFF, off).apply()
-    }
 
     fun isShowDate(context: Context): Boolean =
         prefs(context).getBoolean(KEY_SHOW_DATE, true)
@@ -115,14 +131,14 @@ object PrefsManager {
     // ════════ News ════════
 
     fun getNewsRssUrl(context: Context): String =
-        prefs(context).getString(KEY_NEWS_RSS_URL, "https://news.yandex.ru/index.rss") ?: "https://news.yandex.ru/index.rss"
+        prefs(context).getString(KEY_NEWS_RSS_URL, "https://rssexport.rbc.ru/rbcnews/news/30/full.rss") ?: "https://rssexport.rbc.ru/rbcnews/news/30/full.rss"
 
     fun setNewsRssUrl(context: Context, url: String) {
         prefs(context).edit().putString(KEY_NEWS_RSS_URL, url).apply()
     }
 
     fun getNewsIntervalMin(context: Context): Int =
-        prefs(context).getInt(KEY_NEWS_INTERVAL_MIN, 5)
+        prefs(context).getInt(KEY_NEWS_INTERVAL_MIN, 30)
 
     fun setNewsIntervalMin(context: Context, min: Int) {
         prefs(context).edit().putInt(KEY_NEWS_INTERVAL_MIN, min).apply()
@@ -144,6 +160,51 @@ object PrefsManager {
     fun isNewsEnabled(context: Context): Boolean =
         getNewsRssUrl(context).isNotBlank()
 
+    fun getNewsDisplayCount(context: Context): Int =
+        prefs(context).getInt(KEY_NEWS_DISPLAY_COUNT, 5)
+
+    fun setNewsDisplayCount(context: Context, count: Int) {
+        prefs(context).edit().putInt(KEY_NEWS_DISPLAY_COUNT, count.coerceIn(1, 20)).apply()
+    }
+
+    fun getNewsDownloadCount(context: Context): Int =
+        prefs(context).getInt(KEY_NEWS_DOWNLOAD_COUNT, 5)
+
+    fun setNewsDownloadCount(context: Context, count: Int) {
+        prefs(context).edit().putInt(KEY_NEWS_DOWNLOAD_COUNT, count.coerceIn(1, 30)).apply()
+    }
+
+    fun isNewsShuffle(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_NEWS_SHUFFLE, false)
+
+    fun setNewsShuffle(context: Context, shuffle: Boolean) {
+        prefs(context).edit().putBoolean(KEY_NEWS_SHUFFLE, shuffle).apply()
+    }
+
+    fun isNewsOnlyHeader(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_NEWS_ONLY_HEADER, true)
+
+    fun setNewsOnlyHeader(context: Context, onlyHeader: Boolean) {
+        prefs(context).edit().putBoolean(KEY_NEWS_ONLY_HEADER, onlyHeader).apply()
+    }
+
+    fun getFontSizeNewsBody(context: Context): Int =
+        prefs(context).getInt(KEY_FONT_SIZE_NEWS_BODY, 11)
+
+    fun setFontSizeNewsBody(context: Context, sp: Int) {
+        prefs(context).edit().putInt(KEY_FONT_SIZE_NEWS_BODY, sp).apply()
+    }
+
+    fun getNewsBodyTags(context: Context): String =
+        prefs(context).getString(KEY_NEWS_BODY_TAGS, DEFAULT_NEWS_BODY_TAGS) ?: DEFAULT_NEWS_BODY_TAGS
+
+    fun setNewsBodyTags(context: Context, tags: String) {
+        prefs(context).edit().putString(KEY_NEWS_BODY_TAGS, tags).apply()
+    }
+
+    fun getNewsBodyTagList(context: Context): List<String> =
+        getNewsBodyTags(context).split(",").map { it.trim() }.filter { it.isNotBlank() }
+
     // ════════ Notes ════════
 
     fun getNotesJson(context: Context): String =
@@ -151,6 +212,15 @@ object PrefsManager {
 
     fun setNotesJson(context: Context, json: String) {
         prefs(context).edit().putString(KEY_NOTES_JSON, json).apply()
+    }
+
+    // ════════ Stickers ════════
+
+    fun getStickersJson(context: Context): String =
+        prefs(context).getString(KEY_STICKERS_JSON, "[]") ?: "[]"
+
+    fun setStickersJson(context: Context, json: String) {
+        prefs(context).edit().putString(KEY_STICKERS_JSON, json).apply()
     }
 
     // ════════ Bookmate ════════
@@ -220,5 +290,71 @@ object PrefsManager {
 
     fun setBookBackgroundEnabled(context: Context, enabled: Boolean) {
         prefs(context).edit().putBoolean(KEY_BOOK_BACKGROUND_ENABLED, enabled).apply()
+    }
+
+    // ════════ Font sizes ════════
+
+    fun getFontSizeClock(context: Context): Int =
+        prefs(context).getInt(KEY_FONT_SIZE_CLOCK, 72)
+
+    fun setFontSizeClock(context: Context, sp: Int) {
+        prefs(context).edit().putInt(KEY_FONT_SIZE_CLOCK, sp).apply()
+    }
+
+    fun getFontSizeWeather(context: Context): Int =
+        prefs(context).getInt(KEY_FONT_SIZE_WEATHER, 16)
+
+    fun setFontSizeWeather(context: Context, sp: Int) {
+        prefs(context).edit().putInt(KEY_FONT_SIZE_WEATHER, sp).apply()
+    }
+
+    fun getFontSizeNews(context: Context): Int =
+        prefs(context).getInt(KEY_FONT_SIZE_NEWS, 13)
+
+    fun setFontSizeNews(context: Context, sp: Int) {
+        prefs(context).edit().putInt(KEY_FONT_SIZE_NEWS, sp).apply()
+    }
+
+    fun getFontSizeNotes(context: Context): Int =
+        prefs(context).getInt(KEY_FONT_SIZE_NOTES, 13)
+
+    fun setFontSizeNotes(context: Context, sp: Int) {
+        prefs(context).edit().putInt(KEY_FONT_SIZE_NOTES, sp).apply()
+    }
+
+    fun getFontSizeBook(context: Context): Int =
+        prefs(context).getInt(KEY_FONT_SIZE_BOOK, 13)
+
+    fun setFontSizeBook(context: Context, sp: Int) {
+        prefs(context).edit().putInt(KEY_FONT_SIZE_BOOK, sp).apply()
+    }
+
+    // ════════ Notes columns ════════
+
+    fun getNotesColumns(context: Context): Int =
+        prefs(context).getInt(KEY_NOTES_COLUMNS, 2)
+
+    fun setNotesColumns(context: Context, columns: Int) {
+        prefs(context).edit().putInt(KEY_NOTES_COLUMNS, columns.coerceIn(1, 3)).apply()
+    }
+
+    // ════════ Module order ════════
+
+    fun getModulesOrder(context: Context): List<String> {
+        val raw = prefs(context).getString(KEY_MODULES_ORDER, DEFAULT_MODULES_ORDER) ?: DEFAULT_MODULES_ORDER
+        return raw.split(",").filter { it.isNotBlank() }
+    }
+
+    fun setModulesOrder(context: Context, order: List<String>) {
+        prefs(context).edit().putString(KEY_MODULES_ORDER, order.joinToString(",")).apply()
+    }
+
+    // ════════ Clock position ════════
+
+    fun getClockPosition(context: Context): String =
+        prefs(context).getString(KEY_CLOCK_POSITION, "left") ?: "left"
+
+    fun setClockPosition(context: Context, position: String) {
+        prefs(context).edit().putString(KEY_CLOCK_POSITION, position).apply()
     }
 }

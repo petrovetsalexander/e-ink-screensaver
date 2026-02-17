@@ -17,6 +17,7 @@
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
+        android:localeConfig="@xml/locales_config"
         android:supportsRtl="true"
         android:theme="@style/Theme.EinkScreensaver">
 
@@ -32,6 +33,12 @@
         </activity>
 
         <activity android:name=".SettingsActivity" android:exported="false" />
+        <activity android:name=".ModuleSettingsActivity" android:exported="false" />
+        <activity android:name=".ClockSettingsActivity" android:exported="false" />
+        <activity android:name=".WeatherSettingsActivity" android:exported="false" />
+        <activity android:name=".NewsSettingsActivity" android:exported="false" />
+        <activity android:name=".NotesSettingsActivity" android:exported="false" />
+        <activity android:name=".BookSettingsActivity" android:exported="false" />
 
         <!-- Скринсейвер поверх lockscreen -->
         <activity
@@ -39,7 +46,7 @@
             android:exported="false"
             android:theme="@style/Theme.LockScreen"
             android:showWhenLocked="true"
-            android:turnScreenOn="true"
+            android:turnScreenOn="false"
             android:excludeFromRecents="true"
             android:taskAffinity=".lockscreen"
             android:launchMode="singleTask"
@@ -54,6 +61,16 @@
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="eink_screensaver_wakelock_fullscreen" />
+        </service>
+
+        <!-- Per-app language support (AppCompat auto-storage for pre-Android 13) -->
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
         </service>
 
         <!-- Автозапуск при загрузке -->

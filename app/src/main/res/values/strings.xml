@@ -1,4 +1,159 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">E-Ink Скринсейвер</string>
+    <string name="app_name">E-Ink Screensaver</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Settings</string>
+    <string name="back">Back</string>
+    <string name="status_off">Status: off</string>
+    <string name="status_active">Status: active</string>
+    <string name="status_needs_permissions">Status: missing permissions</string>
+    <string name="enable_screensaver">Enable screensaver</string>
+    <string name="disable_screensaver">Disable screensaver</string>
+    <string name="screensaver_enabled">Screensaver enabled</string>
+    <string name="screensaver_disabled">Screensaver disabled</string>
+
+    <!-- Permissions -->
+    <string name="permissions_title">Permissions</string>
+    <string name="checking">Checking…</string>
+    <string name="notifications_label">Notifications: %s</string>
+    <string name="fullscreen_notifications_label">Fullscreen notifications: %s</string>
+    <string name="grant_notifications">Grant notifications</string>
+    <string name="grant_fullscreen">Grant fullscreen notifications</string>
+    <string name="permissions_granted">permissions granted</string>
+    <string name="open_settings_hint">Open Settings → Apps → E-Ink Screensaver → Notifications</string>
+
+    <!-- Clock interval -->
+    <string name="clock_interval_title">Clock update interval</string>
+    <string name="clock_interval_hint">Less often = fewer e-ink refreshes = longer battery</string>
+    <string name="interval_value_min">%d min</string>
+    <string name="interval_disabled">off</string>
+
+    <!-- Additional -->
+    <string name="additional_title">Additional</string>
+    <string name="show_date">Show date</string>
+
+    <!-- Lock screen modules -->
+    <string name="modules_title">Lock screen modules</string>
+    <string name="module_clock">Clock</string>
+    <string name="module_weather">Weather</string>
+    <string name="module_news">News</string>
+    <string name="module_notes">Notes</string>
+    <string name="module_book">Book</string>
+    <string name="book_cover_background">Book cover as background</string>
+
+    <!-- Weather -->
+    <string name="weather_title">Weather</string>
+    <string name="weather_description">OpenWeatherMap (free API key required)</string>
+    <string name="weather_city_hint">City (e.g. Moscow)</string>
+    <string name="weather_api_key_hint">API key</string>
+    <string name="weather_interval_title">Weather update interval</string>
+    <string name="save_weather">Save weather</string>
+    <string name="weather_saved">Weather saved</string>
+
+    <!-- News -->
+    <string name="news_title">News</string>
+    <string name="news_description">RSS feed</string>
+    <string name="news_rss_url_hint">RSS feed URL</string>
+    <string name="news_interval_title">News update interval</string>
+    <string name="news_display_count_label">Show on screensaver: %d</string>
+    <string name="news_display_count_title">News to show at once</string>
+    <string name="news_download_count_label">Download from feed: %d</string>
+    <string name="news_download_count_title">News to download from RSS</string>
+    <string name="news_body_tags_hint">Body XML tags (comma-separated)</string>
+    <string name="news_body_tags_description">XML tags to extract full text from. First found tag takes priority.</string>
+    <string name="news_only_header">Show only headlines</string>
+    <string name="news_body_font_size_label">Body font size: %d sp</string>
+    <string name="news_shuffle">Shuffle</string>
+    <string name="news_shuffle_hint">Random selection each time</string>
+    <string name="news_shuffle_explanation">When active, a random selection of news is picked from all cached headlines each time you lock your phone. The number of shown headlines is controlled by \"News to show at once\" setting.</string>
+    <string name="save_news">Save news</string>
+    <string name="news_saved">News saved</string>
+
+    <!-- Yandex Books (Bookmate) -->
+    <string name="yandex_books_title">Yandex Books</string>
+    <string name="yandex_books_description">Latest book from library</string>
+    <string name="bookmate_user_id_hint">User ID (e.g. b1234567890)</string>
+    <string name="save_yandex_books">Save Yandex Books</string>
+    <string name="yandex_books_saved">Yandex Books saved</string>
+
+    <!-- How it works -->
+    <string name="how_it_works">How it works?</string>
+    <string name="how_it_works_title">How it works</string>
+    <string name="how_it_works_text">• Service listens for screen off event and posts a fullscreen notification (like an alarm) to show the clock over the lock screen\n\n• Screen brightness is set to 0 to prevent frontlight flash — e-ink performs a refresh\n\n• WakeLock expires → screen sleeps, e-ink retains the clock image\n\n• Clock updates periodically via AlarmManager at the configured interval\n\n• Weather, news, and book data update in the background at their own intervals\n\n• Unlock via fingerprint sensor — instant unlock with vibration feedback\n\nImportant: make sure the \"Lock screen clock\" notification channel is enabled in notification settings</string>
+
+    <!-- About -->
+    <string name="about">About</string>
+    <string name="about_title">About</string>
+    <string name="about_text">E-Ink Screensaver\n\nAuthor: Alexander Petrovets\nTelegram: https://t.me/petrovets\n\n© 2026 Alexander Petrovets</string>
+
+    <!-- Notes (MainActivity) -->
+    <string name="notes_title">Notes</string>
+    <string name="sync">Sync</string>
+    <string name="new_note_hint">New note</string>
+    <string name="add">Add</string>
+    <string name="syncing">Syncing…</string>
+    <string name="no_configured_sources">No configured sources</string>
+    <string name="weather_ok">Weather ✓</string>
+    <string name="weather_fail">Weather ✗</string>
+    <string name="news_ok">News ✓</string>
+    <string name="news_fail">News ✗</string>
+    <string name="book_ok">Book ✓</string>
+    <string name="book_fail">Book ✗</string>
+    <string name="cover_ok">Cover ✓</string>
+    <string name="cover_fail">Cover ✗</string>
+
+    <!-- Stickers -->
+    <string name="sticker_new">New sticker</string>
+    <string name="sticker_name_hint">Sticker name</string>
+    <string name="sticker_create">Create</string>
+    <string name="sticker_delete">Delete</string>
+    <string name="sticker_delete_confirm">Delete sticker \"%s\"?</string>
+    <string name="sticker_empty">No stickers yet</string>
+    <string name="sticker_select">Select sticker</string>
+    <string name="sticker_visible_title">Show on screensaver</string>
+    <string name="sticker_no_notes">No notes</string>
+    <string name="sticker_default_name">Notes</string>
+
+    <!-- Lock screen labels -->
+    <string name="label_news">News</string>
+    <string name="label_notes">Notes</string>
+    <string name="label_book">Book</string>
+    <string name="unlock_hint">Press the unlock button to exit screensaver mode</string>
+
+    <!-- Notifications -->
+    <string name="channel_screensaver">E-Ink Screensaver</string>
+    <string name="channel_screensaver_desc">Screensaver background service</string>
+    <string name="channel_lockscreen">Lock screen clock</string>
+    <string name="channel_lockscreen_desc">Show clock on lock screen</string>
+    <string name="notification_title">Screensaver active</string>
+    <string name="notification_text">Clock on lock screen</string>
+    <string name="notification_clock_title">E-Ink Clock</string>
+    <string name="notification_stop">Stop</string>
+
+    <!-- Weather display -->
+    <string name="weather_day">Day</string>
+    <string name="weather_night">Night</string>
+
+    <!-- Language -->
+    <string name="language_title">Language</string>
+    <string name="language_system">System default</string>
+    <string name="language_english">English</string>
+    <string name="language_russian">Russian</string>
+
+    <!-- Module settings -->
+    <string name="module_settings_title">Module settings</string>
+    <string name="font_size_label">Font size: %d sp</string>
+    <string name="clock_settings">Clock settings</string>
+    <string name="weather_settings">Weather settings</string>
+    <string name="news_settings">News settings</string>
+    <string name="notes_settings">Notes settings</string>
+    <string name="book_settings">Book settings</string>
+    <string name="notes_columns_label">Columns: %d</string>
+    <string name="notes_columns_title">Number of columns</string>
+    <string name="save">Save</string>
+    <string name="drag_to_reorder">Drag to reorder modules</string>
+    <string name="clock_position_title">Clock position</string>
+    <string name="clock_position_left">Left</string>
+    <string name="clock_position_right">Right</string>
 </resources>

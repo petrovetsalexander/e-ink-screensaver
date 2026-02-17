@@ -58,7 +58,7 @@ object BookmateFetcher {
                 authors.getJSONObject(0).optString("name", "")
             } else ""
 
-            val coverUrl = book.optString("cover", "")
+            val coverUrl = book.optJSONObject("cover")?.optString("large", "") ?: ""
 
             BookData(title, author, annotation, coverUrl)
         } catch (e: Exception) {

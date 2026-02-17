@@ -18,7 +18,7 @@
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="Заметки"
+            android:text="@string/notes_title"
             android:textSize="24sp"
             android:textStyle="bold"
             android:textColor="#000000" />
@@ -29,7 +29,7 @@
             android:layout_height="40dp"
             android:src="@android:drawable/ic_menu_rotate"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Синхронизация"
+            android:contentDescription="@string/sync"
             android:scaleType="centerInside" />
 
         <ImageButton
@@ -38,7 +38,7 @@
             android:layout_height="40dp"
             android:src="@android:drawable/ic_menu_manage"
             android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="Настройки"
+            android:contentDescription="@string/settings_title"
             android:scaleType="centerInside" />
 
     </LinearLayout>
@@ -52,13 +52,43 @@
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:padding="24dp">
+        android:padding="16dp">
 
         <LinearLayout
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical">
 
+            <!-- New sticker button -->
+            <Button
+                android:id="@+id/btnNewSticker"
+                android:layout_width="match_parent"
+                android:layout_height="44dp"
+                android:text="@string/sticker_new"
+                android:textSize="14sp"
+                android:layout_marginBottom="8dp"
+                style="@style/Widget.Material3.Button.OutlinedButton" />
+
+            <!-- Sticker list -->
+            <LinearLayout
+                android:id="@+id/stickersListContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:layout_marginBottom="12dp" />
+
+            <!-- Selected sticker header -->
+            <TextView
+                android:id="@+id/tvSelectedSticker"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textSize="14sp"
+                android:textColor="#888888"
+                android:textStyle="bold"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <!-- Notes for selected sticker -->
             <LinearLayout
                 android:id="@+id/notesListContainer"
                 android:layout_width="match_parent"
@@ -66,17 +96,20 @@
                 android:orientation="vertical"
                 android:layout_marginBottom="8dp" />
 
+            <!-- Add note row -->
             <LinearLayout
+                android:id="@+id/addNoteRow"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="horizontal">
+                android:orientation="horizontal"
+                android:visibility="gone">
 
                 <EditText
                     android:id="@+id/etNewNote"
                     android:layout_width="0dp"
                     android:layout_height="44dp"
                     android:layout_weight="1"
-                    android:hint="Новая заметка"
+                    android:hint="@string/new_note_hint"
                     android:textSize="14sp"
                     android:inputType="text"
                     android:layout_marginEnd="8dp" />
@@ -85,10 +118,39 @@
                     android:id="@+id/btnAddNote"
                     android:layout_width="wrap_content"
                     android:layout_height="44dp"
-                    android:text="Добавить"
+                    android:text="@string/add"
                     android:textSize="14sp"
                     style="@style/Widget.Material3.Button.OutlinedButton" />
             </LinearLayout>
+
+            <!-- Divider before visibility section -->
+            <View
+                android:id="@+id/visibilityDivider"
+                android:layout_width="match_parent"
+                android:layout_height="1dp"
+                android:background="#EEEEEE"
+                android:layout_marginTop="12dp"
+                android:layout_marginBottom="8dp"
+                android:visibility="gone" />
+
+            <!-- Visibility title -->
+            <TextView
+                android:id="@+id/tvVisibilityTitle"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sticker_visible_title"
+                android:textSize="14sp"
+                android:textColor="#888888"
+                android:textStyle="bold"
+                android:layout_marginBottom="4dp"
+                android:visibility="gone" />
+
+            <!-- Visibility checkboxes -->
+            <LinearLayout
+                android:id="@+id/visibilityContainer"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical" />
 
         </LinearLayout>
     </ScrollView>
