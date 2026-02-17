@@ -1,0 +1,159 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">E-Ink Скринсейвер</string>
+
+    <!-- Settings screen -->
+    <string name="settings_title">Настройки</string>
+    <string name="back">Назад</string>
+    <string name="status_off">Статус: выключен</string>
+    <string name="status_active">Статус: активен</string>
+    <string name="status_needs_permissions">Статус: нужны разрешения</string>
+    <string name="enable_screensaver">Включить скринсейвер</string>
+    <string name="disable_screensaver">Выключить скринсейвер</string>
+    <string name="screensaver_enabled">Скринсейвер включен</string>
+    <string name="screensaver_disabled">Скринсейвер выключен</string>
+
+    <!-- Permissions -->
+    <string name="permissions_title">Разрешения</string>
+    <string name="checking">Проверка…</string>
+    <string name="notifications_label">Уведомления: %s</string>
+    <string name="fullscreen_notifications_label">Полноэкранные уведомления: %s</string>
+    <string name="grant_notifications">Разрешить уведомления</string>
+    <string name="grant_fullscreen">Разрешить полноэкранные уведомления</string>
+    <string name="permissions_granted">разрешения предоставлены</string>
+    <string name="open_settings_hint">Откройте Настройки → Приложения → E-Ink Скринсейвер → Уведомления</string>
+
+    <!-- Clock interval -->
+    <string name="clock_interval_title">Интервал обновления часов</string>
+    <string name="clock_interval_hint">Реже = меньше обновлений e-ink = дольше батарея</string>
+    <string name="interval_value_min">%d мин</string>
+    <string name="interval_disabled">выкл</string>
+
+    <!-- Additional -->
+    <string name="additional_title">Дополнительно</string>
+    <string name="show_date">Показывать дату</string>
+
+    <!-- Lock screen modules -->
+    <string name="modules_title">Модули на экране блокировки</string>
+    <string name="module_clock">Часы</string>
+    <string name="module_weather">Погода</string>
+    <string name="module_news">Новости</string>
+    <string name="module_notes">Заметки</string>
+    <string name="module_book">Книга</string>
+    <string name="book_cover_background">Обложка книги как фон</string>
+
+    <!-- Weather -->
+    <string name="weather_title">Погода</string>
+    <string name="weather_description">OpenWeatherMap (нужен бесплатный API ключ)</string>
+    <string name="weather_city_hint">Город (напр. Moscow)</string>
+    <string name="weather_api_key_hint">API ключ</string>
+    <string name="weather_interval_title">Интервал обновления погоды</string>
+    <string name="save_weather">Сохранить погоду</string>
+    <string name="weather_saved">Погода сохранена</string>
+
+    <!-- News -->
+    <string name="news_title">Новости</string>
+    <string name="news_description">RSS лента</string>
+    <string name="news_rss_url_hint">URL RSS ленты</string>
+    <string name="news_interval_title">Интервал обновления новостей</string>
+    <string name="news_display_count_label">Показывать на экране: %d</string>
+    <string name="news_display_count_title">Новостей на экране</string>
+    <string name="news_download_count_label">Загружать из ленты: %d</string>
+    <string name="news_download_count_title">Новостей для загрузки из RSS</string>
+    <string name="news_body_tags_hint">XML-теги текста (через запятую)</string>
+    <string name="news_body_tags_description">XML-теги для извлечения полного текста. Приоритет у первого найденного.</string>
+    <string name="news_only_header">Показывать только заголовки</string>
+    <string name="news_body_font_size_label">Размер шрифта текста: %d sp</string>
+    <string name="news_shuffle">Перемешивать</string>
+    <string name="news_shuffle_hint">Случайный выбор при каждой блокировке</string>
+    <string name="news_shuffle_explanation">Когда активно, при каждой блокировке телефона из всех загруженных новостей случайным образом выбирается указанное количество для показа на экране. Количество показываемых новостей контролируется настройкой «Новостей на экране».</string>
+    <string name="save_news">Сохранить новости</string>
+    <string name="news_saved">Новости сохранены</string>
+
+    <!-- Yandex Books (Bookmate) -->
+    <string name="yandex_books_title">Яндекс Книги</string>
+    <string name="yandex_books_description">Последняя книга из библиотеки</string>
+    <string name="bookmate_user_id_hint">User ID (напр. b1234567890)</string>
+    <string name="save_yandex_books">Сохранить Яндекс Книги</string>
+    <string name="yandex_books_saved">Яндекс Книги сохранены</string>
+
+    <!-- How it works -->
+    <string name="how_it_works">Как это работает?</string>
+    <string name="how_it_works_title">Как это работает</string>
+    <string name="how_it_works_text">• Сервис слушает событие выключения экрана и показывает часы через полноэкранное уведомление (как будильник)\n\n• Яркость экрана = 0 — подсветка не мигает, e-ink выполняет refresh\n\n• WakeLock истекает → экран спит, e-ink сохраняет часы\n\n• Часы обновляются периодически через AlarmManager с настроенным интервалом\n\n• Погода, новости и книга обновляются в фоне с собственными интервалами\n\n• Разблокировка: палец на датчике → мгновенный unlock с вибрацией\n\nВажно: убедитесь что канал «Часы на экране блокировки» включен в настройках уведомлений</string>
+
+    <!-- About -->
+    <string name="about">О приложении</string>
+    <string name="about_title">О приложении</string>
+    <string name="about_text">E-Ink Скринсейвер\n\nАвтор: Alexander Petrovets\nTelegram: https://t.me/petrovets\n\n© 2026 Alexander Petrovets</string>
+
+    <!-- Notes (MainActivity) -->
+    <string name="notes_title">Заметки</string>
+    <string name="sync">Синхронизация</string>
+    <string name="new_note_hint">Новая заметка</string>
+    <string name="add">Добавить</string>
+    <string name="syncing">Синхронизация…</string>
+    <string name="no_configured_sources">Нет настроенных источников</string>
+    <string name="weather_ok">Погода ✓</string>
+    <string name="weather_fail">Погода ✗</string>
+    <string name="news_ok">Новости ✓</string>
+    <string name="news_fail">Новости ✗</string>
+    <string name="book_ok">Книга ✓</string>
+    <string name="book_fail">Книга ✗</string>
+    <string name="cover_ok">Обложка ✓</string>
+    <string name="cover_fail">Обложка ✗</string>
+
+    <!-- Stickers -->
+    <string name="sticker_new">Новый стикер</string>
+    <string name="sticker_name_hint">Название стикера</string>
+    <string name="sticker_create">Создать</string>
+    <string name="sticker_delete">Удалить</string>
+    <string name="sticker_delete_confirm">Удалить стикер \"%s\"?</string>
+    <string name="sticker_empty">Стикеров пока нет</string>
+    <string name="sticker_select">Выберите стикер</string>
+    <string name="sticker_visible_title">Показывать на скринсейвере</string>
+    <string name="sticker_no_notes">Нет заметок</string>
+    <string name="sticker_default_name">Заметки</string>
+
+    <!-- Lock screen labels -->
+    <string name="label_news">Новости</string>
+    <string name="label_notes">Заметки</string>
+    <string name="label_book">Книга</string>
+    <string name="unlock_hint">Нажмите на кнопку разблокировки, чтобы выйти из режима скринсейвера</string>
+
+    <!-- Notifications -->
+    <string name="channel_screensaver">E-Ink Скринсейвер</string>
+    <string name="channel_screensaver_desc">Фоновый сервис скринсейвера</string>
+    <string name="channel_lockscreen">Часы на экране блокировки</string>
+    <string name="channel_lockscreen_desc">Показ часов при блокировке</string>
+    <string name="notification_title">Скринсейвер активен</string>
+    <string name="notification_text">Часы на заблокированном экране</string>
+    <string name="notification_clock_title">E-Ink Часы</string>
+    <string name="notification_stop">Остановить</string>
+
+    <!-- Weather display -->
+    <string name="weather_day">День</string>
+    <string name="weather_night">Ночь</string>
+
+    <!-- Language -->
+    <string name="language_title">Язык</string>
+    <string name="language_system">Системный</string>
+    <string name="language_english">English</string>
+    <string name="language_russian">Русский</string>
+
+    <!-- Module settings -->
+    <string name="module_settings_title">Настройки модулей</string>
+    <string name="font_size_label">Размер шрифта: %d sp</string>
+    <string name="clock_settings">Настройки часов</string>
+    <string name="weather_settings">Настройки погоды</string>
+    <string name="news_settings">Настройки новостей</string>
+    <string name="notes_settings">Настройки заметок</string>
+    <string name="book_settings">Настройки книги</string>
+    <string name="notes_columns_label">Колонок: %d</string>
+    <string name="notes_columns_title">Количество колонок</string>
+    <string name="save">Сохранить</string>
+    <string name="drag_to_reorder">Перетащите для изменения порядка модулей</string>
+    <string name="clock_position_title">Положение часов</string>
+    <string name="clock_position_left">Слева</string>
+    <string name="clock_position_right">Справа</string>
+</resources>

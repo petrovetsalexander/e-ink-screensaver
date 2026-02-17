@@ -36,6 +36,7 @@ class ScreenSaverService : Service() {
         private const val ACTION_UPDATE_CLOCK = "com.eink.screensaver.ACTION_UPDATE_CLOCK"
         private const val ALARM_REQUEST_CODE = 2001
 
+        const val ACTION_DATA_UPDATED = "com.eink.screensaver.ACTION_DATA_UPDATED"
         private const val ACTION_FETCH_DATA = "com.eink.screensaver.ACTION_FETCH_DATA"
         private const val FETCH_REQUEST_CODE = 2002
         private const val FETCH_WAKELOCK_TIMEOUT_MS = 20_000L
@@ -134,6 +135,11 @@ class ScreenSaverService : Service() {
     // ════════ SCREEN_OFF → WakeLock → FullScreen Notification ════════
 
     private fun onScreenOff() {
+        if (LockScreenActivity.isActive) {
+            Log.d(TAG, "LockScreenActivity already active, skipping fullScreenIntent")
+            return
+        }
+
         acquireWakeLock()
 
         handler.postDelayed({
@@ -145,10 +151,14 @@ class ScreenSaverService : Service() {
     }
 
     private fun postFullScreenNotification() {
+        // Cancel previous notification so the system treats this as a new fullScreenIntent
+        notificationManager.cancel(LOCKSCREEN_NOTIFICATION_ID)
+
         val fullScreenIntent = Intent(this, LockScreenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
+            putExtra("timestamp", SystemClock.elapsedRealtime())
         }
 
         val fullScreenPendingIntent = PendingIntent.getActivity(
@@ -157,7 +167,7 @@ class ScreenSaverService : Service() {
         )
 
         val notification = Notification.Builder(this, CHANNEL_LOCKSCREEN_ID)
-            .setContentTitle("E-Ink Часы")
+            .setContentTitle(getString(R.string.notification_clock_title))
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setFullScreenIntent(fullScreenPendingIntent, true)
             .setCategory(Notification.CATEGORY_ALARM)
@@ -329,9 +339,11 @@ class ScreenSaverService : Service() {
                 if (PrefsManager.isNewsEnabled(ctx)) {
                     val interval = PrefsManager.getNewsIntervalMin(ctx) * 60_000L
                     if (now - PrefsManager.getNewsCacheTimeMs(ctx) > interval) {
-                        val titles = NewsFetcher.fetch(PrefsManager.getNewsRssUrl(ctx))
-                        if (titles != null) {
-                            PrefsManager.setNewsCache(ctx, NewsFetcher.titlesToJson(titles))
+                        val downloadCount = PrefsManager.getNewsDownloadCount(ctx)
+                        val bodyTags = PrefsManager.getNewsBodyTagList(ctx)
+                        val items = NewsFetcher.fetch(PrefsManager.getNewsRssUrl(ctx), downloadCount, bodyTags)
+                        if (items != null) {
+                            PrefsManager.setNewsCache(ctx, NewsFetcher.itemsToJson(items))
                             Log.d(TAG, "News cache updated")
                         }
                     }
@@ -351,6 +363,8 @@ class ScreenSaverService : Service() {
                         }
                     }
                 }
+                sendBroadcast(Intent(ACTION_DATA_UPDATED).setPackage(packageName))
+                Log.d(TAG, "Data updated → broadcast sent")
             } catch (e: Exception) {
                 Log.w(TAG, "Data fetch error: ${e.message}")
             } finally {
@@ -384,16 +398,16 @@ class ScreenSaverService : Service() {
 
     private fun createNotificationChannels() {
         val mainChannel = NotificationChannel(
-            CHANNEL_ID, "E-Ink Скринсейвер", NotificationManager.IMPORTANCE_LOW
+            CHANNEL_ID, getString(R.string.channel_screensaver), NotificationManager.IMPORTANCE_LOW
         ).apply {
-            description = "Фоновый сервис скринсейвера"
+            description = getString(R.string.channel_screensaver_desc)
             setShowBadge(false)
         }
 
         val lockChannel = NotificationChannel(
-            CHANNEL_LOCKSCREEN_ID, "Часы на экране блокировки", NotificationManager.IMPORTANCE_HIGH
+            CHANNEL_LOCKSCREEN_ID, getString(R.string.channel_lockscreen), NotificationManager.IMPORTANCE_HIGH
         ).apply {
-            description = "Показ часов при блокировке"
+            description = getString(R.string.channel_lockscreen_desc)
             setShowBadge(false)
             setSound(null, null)
             enableVibration(false)
@@ -416,11 +430,11 @@ class ScreenSaverService : Service() {
             PendingIntent.FLAG_IMMUTABLE
         )
         return Notification.Builder(this, CHANNEL_ID)
-            .setContentTitle("Скринсейвер активен")
-            .setContentText("Часы на заблокированном экране")
+            .setContentTitle(getString(R.string.notification_title))
+            .setContentText(getString(R.string.notification_text))
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentIntent(openIntent)
-            .addAction(Notification.Action.Builder(null, "Остановить", stopIntent).build())
+            .addAction(Notification.Action.Builder(null, getString(R.string.notification_stop), stopIntent).build())
             .setOngoing(true)
             .build()
     }
