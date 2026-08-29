@@ -5,3 +5,5 @@
 /app/build
 /build
 .DS_Store
+.kotlin
+.claude/settings.local.json
