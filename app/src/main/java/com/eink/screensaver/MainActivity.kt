@@ -14,6 +14,11 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import com.eink.screensaver.data.BookmateFetcher
+import com.eink.screensaver.data.ImageCache
+import com.eink.screensaver.data.NewsFetcher
+import com.eink.screensaver.data.WeatherFetcher
+import com.eink.screensaver.settings.SettingsActivity
 import org.json.JSONArray
 import org.json.JSONObject
 

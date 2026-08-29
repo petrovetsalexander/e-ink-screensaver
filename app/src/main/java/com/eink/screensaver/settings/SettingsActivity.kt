@@ -1,4 +1,4 @@
-package com.eink.screensaver
+package com.eink.screensaver.settings
 
 import android.Manifest
 import android.app.NotificationManager
@@ -24,6 +24,9 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
 import androidx.core.os.LocaleListCompat
+import com.eink.screensaver.BootReceiver
+import com.eink.screensaver.PrefsManager
+import com.eink.screensaver.R
 
 class SettingsActivity : AppCompatActivity() {
 

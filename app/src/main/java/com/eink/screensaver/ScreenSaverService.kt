@@ -19,6 +19,10 @@ import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
+import com.eink.screensaver.data.BookmateFetcher
+import com.eink.screensaver.data.ImageCache
+import com.eink.screensaver.data.NewsFetcher
+import com.eink.screensaver.data.WeatherFetcher
 
 class ScreenSaverService : Service() {
 
@@ -134,49 +138,39 @@ class ScreenSaverService : Service() {
 
     // ════════ SCREEN_OFF → WakeLock → FullScreen Notification ════════
 
+    @SuppressLint("WakelockTimeout")
     private fun onScreenOff() {
         if (LockScreenActivity.isActive) {
-            Log.d(TAG, "LockScreenActivity already active, skipping fullScreenIntent")
+            Log.d(TAG, "LockScreenActivity already active, skipping launch")
             return
         }
 
-        acquireWakeLock()
+        // Acquire a wake lock that turns the screen on — needed since we no longer
+        // use fullScreenIntent. SCREEN_BRIGHT_WAKE_LOCK is deprecated but still
+        // functional and is the only way to wake the screen from a service without
+        // fullScreenIntent. The activity's brightness=0.0f overrides immediately.
+        releaseWakeLock()
+        @Suppress("DEPRECATION")
+        wakeLock = powerManager.newWakeLock(
+            PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            "EinkScreensaver:ScreenOn"
+        )
+        wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
+        Log.d(TAG, "Screen-on WakeLock acquired")
 
-        handler.postDelayed({
-            postFullScreenNotification()
-            scheduleClockAlarm()
-        }, LAUNCH_DELAY_MS)
-
-        triggerDataFetchIfStale()
-    }
-
-    private fun postFullScreenNotification() {
-        // Cancel previous notification so the system treats this as a new fullScreenIntent
-        notificationManager.cancel(LOCKSCREEN_NOTIFICATION_ID)
-
-        val fullScreenIntent = Intent(this, LockScreenActivity::class.java).apply {
+        val intent = Intent(this, LockScreenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             addFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP)
             addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
-            putExtra("timestamp", SystemClock.elapsedRealtime())
         }
 
-        val fullScreenPendingIntent = PendingIntent.getActivity(
-            this, 0, fullScreenIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
+        // Small delay ensures screen is on before launching activity
+        handler.postDelayed({
+            startActivity(intent)
+        }, LAUNCH_DELAY_MS)
 
-        val notification = Notification.Builder(this, CHANNEL_LOCKSCREEN_ID)
-            .setContentTitle(getString(R.string.notification_clock_title))
-            .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
-            .setFullScreenIntent(fullScreenPendingIntent, true)
-            .setCategory(Notification.CATEGORY_ALARM)
-            .setVisibility(Notification.VISIBILITY_PUBLIC)
-            .setOngoing(true)
-            .build()
-
-        notificationManager.notify(LOCKSCREEN_NOTIFICATION_ID, notification)
-        Log.d(TAG, "Full-screen notification posted")
+        scheduleClockAlarm()
+        triggerDataFetchIfStale()
     }
 
     fun cancelLockscreenNotification() {
@@ -248,13 +242,18 @@ class ScreenSaverService : Service() {
 
     private fun onClockAlarmFired() {
         releaseWakeLock()
+        @Suppress("DEPRECATION")
         wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
+            PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
             "EinkScreensaver:AlarmUpdate"
         )
         wakeLock?.acquire(ALARM_WAKELOCK_TIMEOUT_MS)
 
-        postFullScreenNotification()
+        // Send broadcast to active lockscreen
+        sendBroadcast(
+            Intent(LockScreenActivity.ACTION_UPDATE_DISPLAY)
+                .setPackage(packageName)
+        )
         scheduleClockAlarm()
     }
 

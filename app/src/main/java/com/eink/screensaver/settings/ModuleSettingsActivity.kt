@@ -1,4 +1,4 @@
-package com.eink.screensaver
+package com.eink.screensaver.settings
 
 import android.annotation.SuppressLint
 import android.content.Intent
@@ -17,6 +17,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import com.eink.screensaver.PrefsManager
+import com.eink.screensaver.R
 import java.util.Collections
 
 class ModuleSettingsActivity : AppCompatActivity() {

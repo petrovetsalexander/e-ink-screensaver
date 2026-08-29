@@ -1,4 +1,4 @@
-package com.eink.screensaver
+package com.eink.screensaver.data
 
 import android.util.Log
 import java.io.BufferedReader

@@ -1,4 +1,4 @@
-package com.eink.screensaver
+package com.eink.screensaver.data
 
 import android.content.Context
 import android.graphics.Bitmap
