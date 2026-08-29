@@ -25,6 +25,12 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import org.json.JSONArray
+import com.eink.screensaver.data.BookData
+import com.eink.screensaver.data.ImageCache
+import com.eink.screensaver.data.NewsFetcher
+import com.eink.screensaver.data.NewsItem
+import com.eink.screensaver.data.WeatherData
+import com.eink.screensaver.data.WeatherFetcher
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -36,6 +42,7 @@ class LockScreenActivity : AppCompatActivity() {
         const val ACTION_FINISH = "com.eink.screensaver.ACTION_FINISH_LOCKSCREEN"
         const val ACTION_UPDATE_DISPLAY = "com.eink.screensaver.ACTION_UPDATE_DISPLAY"
         private const val UNLOCK_POLL_INTERVAL_MS = 1000L
+        private const val EINK_FULL_REFRESH_DELAY_MS = 100L
 
         @Volatile
         var isActive = false
@@ -127,21 +134,21 @@ class LockScreenActivity : AppCompatActivity() {
 
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
 
-        // Brightness 0 prevents frontlight flash while e-ink still refreshes.
-        // Do NOT use setTurnScreenOn / FLAG_TURN_SCREEN_ON — those cause the system
-        // to activate the backlight at default brightness before the window's brightness
-        // override (0.0f) takes effect, resulting in a visible flash.
-        // The fullScreenIntent notification handles waking the display instead.
+        // Set brightness to 0 FIRST, before turning screen on.
+        // This minimizes frontlight flash on e-ink — the window's brightness attribute
+        // is applied as the screen wakes.
         window.attributes = window.attributes.apply {
             screenBrightness = 0.0f
         }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
+            setTurnScreenOn(true)
         } else {
             @Suppress("DEPRECATION")
             window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED
+                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
             )
         }
 
@@ -185,10 +192,11 @@ class LockScreenActivity : AppCompatActivity() {
         bookAuthorText = findViewById(R.id.bookAuthorText)
         bookAnnotationText = findViewById(R.id.bookAnnotationText)
 
-        findViewById<View>(R.id.touchInterceptor).setOnTouchListener { _, _ -> true }
-
         registerReceivers()
-        updateDisplay()
+
+        // Force full e-ink refresh: briefly show black screen, then draw content.
+        // This forces every pixel to transition (full GC16 refresh), clearing ghosting.
+        forceFullEinkRefresh()
 
         Log.d(TAG, "Activity created, display drawn")
     }
@@ -233,8 +241,6 @@ class LockScreenActivity : AppCompatActivity() {
     }
 
     // ════════ Touch blocking ════════
-
-    override fun dispatchTouchEvent(ev: MotionEvent?): Boolean = true
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {}
@@ -281,6 +287,23 @@ class LockScreenActivity : AppCompatActivity() {
         } catch (e: Exception) {
             Log.w(TAG, "Vibration failed: ${e.message}")
         }
+    }
+
+    // ════════ E-ink full refresh ════════
+
+    private fun forceFullEinkRefresh() {
+        // Flash the root view black to force a full pixel transition on the e-ink panel.
+        // This is the universal way to trigger a full GC16 refresh on any e-ink device
+        // without needing vendor-specific APIs.
+        val root = window.decorView
+        root.setBackgroundColor(0xFF000000.toInt())
+        root.invalidate()
+
+        handler.postDelayed({
+            root.setBackgroundColor(0xFFFFFFFF.toInt())
+            root.invalidate()
+            updateDisplay()
+        }, EINK_FULL_REFRESH_DELAY_MS)
     }
 
     // ════════ Display ════════

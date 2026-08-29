@@ -1,10 +1,12 @@
-package com.eink.screensaver
+package com.eink.screensaver.settings
 
 import android.os.Bundle
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import com.eink.screensaver.PrefsManager
+import com.eink.screensaver.R
 
 class NotesSettingsActivity : AppCompatActivity() {
 
