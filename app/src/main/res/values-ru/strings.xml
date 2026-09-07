@@ -20,6 +20,9 @@
     <string name="fullscreen_notifications_label">Полноэкранные уведомления: %s</string>
     <string name="grant_notifications">Разрешить уведомления</string>
     <string name="grant_fullscreen">Разрешить полноэкранные уведомления</string>
+    <string name="write_settings_label">Изменение яркости экрана (необязательно): %s</string>
+    <string name="grant_write_settings">Разрешить менять яркость</string>
+    <string name="write_settings_hint">Без этого при каждой блокировке экрана подсветка на мгновение вспыхивает.</string>
     <string name="permissions_granted">разрешения предоставлены</string>
     <string name="open_settings_hint">Откройте Настройки → Приложения → E-Ink Скринсейвер → Уведомления</string>
 
