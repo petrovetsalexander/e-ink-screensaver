@@ -176,11 +176,11 @@ class ScreenSaverService : Service() {
         // up. The flash itself is handled by the wake lock tag below.
         EinkCompat.dimFrontlight(this)
 
-        if (LockScreenActivity.isActive) {
-            Log.d(TAG, "LockScreenActivity already active, skipping launch")
-            return
-        }
-
+        // Both of these run before the isActive guard, because the screen goes off
+        // on every cycle whether or not the activity survived the last one. Leaving
+        // the wake lock behind the guard is what made the flash come back on every
+        // other lock: on the cycles where we returned early the panel was woken by
+        // something else, without our tag, and the backlight came up with it.
         releaseWakeLock()
         wakeLock = if (EinkCompat.isSupported) {
             // See WAKE_TAG_NO_BACKLIGHT. The tag is the whole trick: it makes the
@@ -201,6 +201,11 @@ class ScreenSaverService : Service() {
         }
         wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
         Log.d(TAG, "WakeLock acquired (${if (EinkCompat.isSupported) "screen, no-backlight tag" else "CPU only"})")
+
+        if (LockScreenActivity.isActive) {
+            Log.d(TAG, "LockScreenActivity already active, skipping launch")
+            return
+        }
 
         val intent = Intent(this, LockScreenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
