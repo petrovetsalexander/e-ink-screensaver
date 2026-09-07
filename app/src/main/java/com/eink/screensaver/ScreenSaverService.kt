@@ -94,7 +94,6 @@ class ScreenSaverService : Service() {
                     cancelLockscreenNotification()
                     releaseWakeLock()
                     EinkCompat.restoreFrontlight(this@ScreenSaverService)
-                    SystemBrightness.restore(this@ScreenSaverService)
                 }
             }
         }
@@ -113,10 +112,9 @@ class ScreenSaverService : Service() {
         startForeground(NOTIFICATION_ID, buildPersistentNotification())
         registerScreenReceiver()
 
-        // If the process died mid-cycle the screen is still being held dark. Put
-        // both levels back before anything else.
+        // If the process died while the frontlight was dimmed, the panel light is
+        // still off. Put it back before anything else.
         EinkCompat.restoreFrontlight(this)
-        SystemBrightness.restore(this)
 
         if (!powerManager.isInteractive) {
             Log.d(TAG, "Service started with screen OFF → trigger lockscreen")
@@ -135,7 +133,6 @@ class ScreenSaverService : Service() {
                 sendBroadcast(Intent(LockScreenActivity.ACTION_FINISH).setPackage(packageName))
                 releaseWakeLock()
                 EinkCompat.restoreFrontlight(this)
-                SystemBrightness.restore(this)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -162,7 +159,6 @@ class ScreenSaverService : Service() {
         releaseFetchWakeLock()
         unregisterScreenReceiver()
         EinkCompat.restoreFrontlight(this)
-        SystemBrightness.restore(this)
         Log.d(TAG, "Service destroyed")
         super.onDestroy()
     }
@@ -174,15 +170,10 @@ class ScreenSaverService : Service() {
     @SuppressLint("WakelockTimeout")
     private fun onScreenOff() {
         // Before the isActive guard: the screen goes off on every cycle, whether or
-        // not the activity survived the last one, and the brightness has to be held
-        // down for all of them.
-        //
-        // On wake DisplayPowerController restores the user's manual brightness
-        // before it ever looks at the activity's screenBrightness=0.0f, so the only
-        // way to stop the flash is for the level it restores to already be dark.
-        // Both calls are no-ops without their permissions, and both are put back on
-        // unlock.
-        SystemBrightness.dim(this)
+        // not the activity survived the last one. Largely vestigial on the HiBreak —
+        // the system zeroes the xrz level before this broadcast reaches us, so the
+        // call usually short-circuits — but other Bigme models may wire that level
+        // up. The flash itself is handled by the wake lock tag below.
         EinkCompat.dimFrontlight(this)
 
         if (LockScreenActivity.isActive) {
