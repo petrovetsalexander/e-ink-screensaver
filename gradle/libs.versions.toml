@@ -10,11 +10,17 @@ appcompat = "1.7.0"
 material = "1.12.0"
 recyclerview = "1.3.2"
 
+# Lifts Android's hidden-API restriction so EinkCompat can reflect into the
+# vendor xrz framework. Standalone library — needs neither root nor the LSPosed
+# framework installed.
+hiddenapibypass = "6.1"
+
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
 androidx-recyclerview = { group = "androidx.recyclerview", name = "recyclerview", version.ref = "recyclerview" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
+hiddenapibypass = { group = "org.lsposed.hiddenapibypass", name = "hiddenapibypass", version.ref = "hiddenapibypass" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
