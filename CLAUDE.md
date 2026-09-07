@@ -135,7 +135,26 @@ Two other candidates were measured and ruled out. **`DisplayPolicyManager.setBri
 
 Untested lead: `screen_brightness_cold` / `screen_brightness_warm`, which suggest the Bigme frontlight has two channels this device exposes separately.
 
-Unrelated but seen in the same logs: `com.xrz.standby/com.xrz.settings.screensaver.ScreenSaveActivity` launches on the same screen-off and is torn down once our activity wins, and `com.xrz.screensaver` was observed waking the power group out of Dozing about once a second. Worth a look for the sleep-drain question.
+### Sleep drain — measured, and it is not this app
+
+25 minutes locked and untouched, `dumpsys batterystats` reset at the start:
+
+```
+u0a280 (this app)          wake lock com.xrz.screensaver: 5.5s over 6 acquisitions
+                           cpu: 1.24s usr + 0.33s krn
+                           wakeup alarm ACTION_UPDATE_CLOCK: 4x
+                           estimated: 0.000955 mAh
+
+device   time on battery 25m 21s, uptime 3m 5s (12.2%), screen on 20s (7x),
+         light idling 15m 13s (60%)
+         idle 2.12 mAh vs ~0.06 mAh for every app combined
+```
+
+So the device's own idle floor (~5 mA) is 97% of the drain and this app is a rounding error inside the remaining 3%. Top wakers were `wlan0` (86x) and `BTIF_WAKEUP_IRQ` (55x) — radios, not us, and the Wi-Fi count is inflated because the measurement ran over wireless adb.
+
+The original complaint most likely was the stock screensaver: `com.xrz.screensaver` was observed waking the power group out of Dozing roughly once a second, and `com.xrz.standby/…ScreenSaveActivity` launched on every screen-off alongside our activity. That package has since been uninstalled from the test device, and the self-sleep in `scheduleSelfSleep` means the device now actually reaches `Asleep` instead of sitting `Awake` until the 10-minute screen timeout.
+
+Caveats for anyone repeating this: the battery was at 100%, so `charge_counter` never moved and `actual drain` reads 0 — the per-app split is trustworthy, the absolute mAh are not. A clean run needs the battery below ~90% and wireless debugging off, which needs a USB cable that survives bulk transfers.
 - Every redraw begins with the black→white flash for a full panel refresh; keep this in mind before adding partial-update paths.
 - The update interval is a battery/ghosting trade-off, not a UI nicety — each tick costs a wake lock and a panel refresh.
 
