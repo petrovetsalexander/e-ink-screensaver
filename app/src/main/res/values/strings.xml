@@ -24,9 +24,9 @@
     <string name="accessibility_service_description">Lets the screensaver put the display back to sleep after it redraws. Without it the panel flashes its frontlight every time the screen locks. Nothing on screen is read.</string>
     <string name="a11y_label">Return to sleep (optional): %s</string>
     <string name="grant_a11y">Enable in Accessibility</string>
-    <string name="a11y_hint">Without this the frontlight flashes for a moment each time the screen locks.</string>
+    <string name="a11y_hint">Without this the frontlight flashes for a moment each time the screen locks. On Android 13 and newer you may first need App info → menu → \"Allow restricted settings\".</string>
     <string name="permissions_granted">permissions granted</string>
-    <string name="open_settings_hint">Open Settings → Apps → E-Ink Screensaver → Notifications</string>
+    <string name="open_settings_hint">Open Settings → Apps → E-Ink Screensaver</string>
 
     <!-- Clock interval -->
     <string name="clock_interval_title">Clock update interval</string>
@@ -85,7 +85,7 @@
     <!-- How it works -->
     <string name="how_it_works">How it works?</string>
     <string name="how_it_works_title">How it works</string>
-    <string name="how_it_works_text">• Service listens for screen off event and posts a fullscreen notification (like an alarm) to show the clock over the lock screen\n\n• Screen brightness is set to 0 to prevent frontlight flash — e-ink performs a refresh\n\n• WakeLock expires → screen sleeps, e-ink retains the clock image\n\n• Clock updates periodically via AlarmManager at the configured interval\n\n• Weather, news, and book data update in the background at their own intervals\n\n• Unlock via fingerprint sensor — instant unlock with vibration feedback\n\nImportant: make sure the \"Lock screen clock\" notification channel is enabled in notification settings</string>
+    <string name="how_it_works_text">• The service listens for the screen turning off and draws the dashboard over the lock screen\n\n• On Bigme e-ink devices the panel is woken in the firmware own no-backlight mode, so the frontlight does not flash\n\n• Straight after drawing, the app puts the device back to sleep. That is what the \"Return to sleep\" accessibility permission is for — without it the frontlight flashes for a moment on every lock\n\n• The device sleeps and the e-ink panel keeps the image at zero power\n\n• The clock is redrawn periodically through AlarmManager at the interval you set\n\n• Weather, news and book data refresh in the background at their own intervals\n\n• Unlock with the fingerprint sensor — instant, with a short vibration\n\nNote for Android 13 and newer: accessibility is blocked for apps installed outside an app store. Open App info, then the menu, then \"Allow restricted settings\" — after that the service can be switched on under Accessibility.</string>
 
     <!-- About -->
     <string name="about">About</string>
