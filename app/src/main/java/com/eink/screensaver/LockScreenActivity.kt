@@ -147,7 +147,15 @@ class LockScreenActivity : AppCompatActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
-            setTurnScreenOn(true)
+            // setTurnScreenOn issues its own wake, with WindowManager's details
+            // string rather than ours — which clears the vendor's isWakeUpOnly flag
+            // and brings the frontlight back up ~400 ms after our tagged wake lock
+            // had suppressed it. On xrz firmware the wake lock in
+            // ScreenSaverService.onScreenOff already turned the panel on, so asking
+            // again is both redundant and the thing that reintroduced the flash.
+            if (!EinkCompat.isSupported) {
+                setTurnScreenOn(true)
+            }
         } else {
             @Suppress("DEPRECATION")
             window.addFlags(

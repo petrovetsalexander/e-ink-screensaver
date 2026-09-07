@@ -34,6 +34,28 @@ class ScreenSaverService : Service() {
         const val LOCKSCREEN_NOTIFICATION_ID = 1002
         const val ACTION_STOP = "com.eink.screensaver.ACTION_STOP"
 
+        /**
+         * Wake lock tag that suppresses the frontlight on Bigme's xrz firmware.
+         *
+         * Not a name — a magic string. The vendor patched
+         * `PowerManagerService.updateGlobalWakefulnessLocked` with, in effect:
+         *
+         *     mIsWakeUpOnly = (reason == WAKE_REASON_APPLICATION
+         *                      && "com.xrz.screensaver".equals(details))
+         *
+         * and `DisplayPowerController` keeps the display at `state=1` while that
+         * flag is set: the panel takes its update, the backlight is never written.
+         * For a wake caused by an ACQUIRE_CAUSES_WAKEUP wake lock the "details"
+         * string is the wake lock's own tag, so any app that picks this exact tag
+         * gets the vendor screensaver's flash-free wake. That is how the stock
+         * standby app avoids the flash, and it needs no permission we lack.
+         *
+         * Read out of /system/framework/services.jar with dexdump. Nothing
+         * guarantees it survives an OTA, so it is used only where
+         * [EinkCompat.isSupported] already says this is xrz firmware.
+         */
+        private const val WAKE_TAG_NO_BACKLIGHT = "com.xrz.screensaver"
+
         private const val LAUNCH_DELAY_MS = 200L
         private const val WAKELOCK_TIMEOUT_MS = 5_000L
         private const val ALARM_WAKELOCK_TIMEOUT_MS = 3_000L
@@ -168,17 +190,26 @@ class ScreenSaverService : Service() {
             return
         }
 
-        // CPU-only wake lock: it keeps this service alive long enough to launch the
-        // activity and let it draw, but deliberately does NOT touch the display.
-        // The activity's own setTurnScreenOn(true) wakes the display instead, with
-        // brightness 0 already set on its window.
         releaseWakeLock()
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "EinkScreensaver:ScreenOn"
-        )
+        wakeLock = if (EinkCompat.isSupported) {
+            // See WAKE_TAG_NO_BACKLIGHT. The tag is the whole trick: it makes the
+            // vendor's PowerManagerService wake the panel without the frontlight.
+            @Suppress("DEPRECATION")
+            powerManager.newWakeLock(
+                PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                WAKE_TAG_NO_BACKLIGHT
+            )
+        } else {
+            // CPU-only: keeps this service alive long enough to launch the activity
+            // and let it draw, but deliberately does NOT touch the display. The
+            // activity's own setTurnScreenOn(true) wakes the display instead.
+            powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "EinkScreensaver:ScreenOn"
+            )
+        }
         wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
-        Log.d(TAG, "CPU WakeLock acquired; activity turns the screen on")
+        Log.d(TAG, "WakeLock acquired (${if (EinkCompat.isSupported) "screen, no-backlight tag" else "CPU only"})")
 
         val intent = Intent(this, LockScreenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -265,10 +296,13 @@ class ScreenSaverService : Service() {
 
     private fun onClockAlarmFired() {
         releaseWakeLock()
+        // Same trick as onScreenOff, and it matters more here: this fires every
+        // update_interval_minutes, so without the tag the panel flashes on every
+        // tick for as long as the device stays locked.
         @Suppress("DEPRECATION")
         wakeLock = powerManager.newWakeLock(
             PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "EinkScreensaver:AlarmUpdate"
+            if (EinkCompat.isSupported) WAKE_TAG_NO_BACKLIGHT else "EinkScreensaver:AlarmUpdate"
         )
         wakeLock?.acquire(ALARM_WAKELOCK_TIMEOUT_MS)
 

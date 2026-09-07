@@ -106,9 +106,20 @@ Measured on the HiBreak, not inferred. The frontlight is Android's own `/sys/cla
 57.266 write 1 to /sys/class/leds/lcd-backlight/brightness
 ```
 
-On every wake `DisplayPowerController` restores the user's manual level first and only then recomputes with our window's `screenBrightness = 0.0f` as `reason=override` — 240 ms later. Having the window already added, drawn and focused shortens the gap to ~141 ms but does **not** remove it: the manual restore is unconditional. So no amount of reordering our activity launch fixes this, and neither does the vendor SDK.
+On every wake `DisplayPowerController` restores the user's manual level first and only then recomputes with our window's `screenBrightness = 0.0f` as `reason=override` — 240 ms later. Having the window already added, drawn and focused shortens the gap to ~141 ms but does **not** remove it: the manual restore is unconditional. Reordering our activity launch does not fix this, and neither does any brightness API — see below for what actually does.
 
-Both candidate fixes are ruled out, measured, not guessed. `DisplayPolicyManager.setBrightnessLevelForPackage` — see the vendor-layer section; the call works end to end and the backlight ignores it. `Settings.System.SCREEN_BRIGHTNESS` via `WRITE_SETTINGS` (`SystemBrightness`, wired into the lock cycle but ineffective — a revert candidate) — `DisplayPowerController` latches the manual level on the way down, does not re-read the setting during the wake, and persists its own value back over ours within 500 ms; a plain `settings put system screen_brightness 1` from adb bounces back to 240 the same way, so it is not about permission or call-site timing. Untested lead: `screen_brightness_cold` / `screen_brightness_warm`, which suggest the Bigme frontlight has two channels this device exposes separately.
+**The fix: `ScreenSaverService.WAKE_TAG_NO_BACKLIGHT`.** Brightness was the wrong thing to chase. Logging the stock screensaver showed it never flashes because the display never leaves `state=1` — its wake carries a vendor flag, printed by this firmware's `DisplayPowerController` as `isWakeUpOnly=true`, and while that is set the panel takes its update and the backlight is never written at all. `dexdump` of `services.jar` shows the vendor patched `PowerManagerService.updateGlobalWakefulnessLocked` to set it from a hardcoded string:
+
+```
+mIsWakeUpOnly = (reason == WAKE_REASON_APPLICATION
+                 && "com.xrz.screensaver".equals(details))
+```
+
+For a wake caused by an `ACQUIRE_CAUSES_WAKEUP` wake lock, `details` is the wake lock's **tag**. So naming our wake lock `"com.xrz.screensaver"` buys the stock screensaver's flash-free wake, with no permission we don't already hold. Both wake paths use it on xrz firmware — `onScreenOff()` and `onClockAlarmFired()`, the latter mattering more since it fires every update interval.
+
+One catch: `LockScreenActivity.setTurnScreenOn(true)` issues a *second* wake with WindowManager's own details string, which clears the flag and brings the light back ~400 ms later. It is skipped when `EinkCompat.isSupported`, since the tagged wake lock has already turned the panel on. Verified: zero `lcd-backlight` writes across a full cycle.
+
+Two earlier candidates were measured and ruled out, and both are dead ends. `DisplayPolicyManager.setBrightnessLevelForPackage` — see the vendor-layer section; the call works end to end and the backlight ignores it. `Settings.System.SCREEN_BRIGHTNESS` via `WRITE_SETTINGS` (`SystemBrightness`, still wired in — now redundant, a revert candidate) — `DisplayPowerController` latches the manual level on the way down, does not re-read the setting during the wake, and persists its own value back over ours within 500 ms; a plain `settings put system screen_brightness 1` from adb bounces back to 240 the same way.
 
 Unrelated but seen in the same logs: `com.xrz.standby/com.xrz.settings.screensaver.ScreenSaveActivity` launches on the same screen-off and is torn down once our activity wins, and `com.xrz.screensaver` was observed waking the power group out of Dozing about once a second. Worth a look for the sleep-drain question.
 - Every redraw begins with the black→white flash for a full panel refresh; keep this in mind before adding partial-update paths.
