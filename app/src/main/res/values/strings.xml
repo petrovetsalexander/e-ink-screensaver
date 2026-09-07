@@ -20,6 +20,9 @@
     <string name="fullscreen_notifications_label">Fullscreen notifications: %s</string>
     <string name="grant_notifications">Grant notifications</string>
     <string name="grant_fullscreen">Grant fullscreen notifications</string>
+    <string name="write_settings_label">Change screen brightness (optional): %s</string>
+    <string name="grant_write_settings">Allow changing brightness</string>
+    <string name="write_settings_hint">Without this the frontlight flashes for a moment each time the screen locks.</string>
     <string name="permissions_granted">permissions granted</string>
     <string name="open_settings_hint">Open Settings → Apps → E-Ink Screensaver → Notifications</string>
 

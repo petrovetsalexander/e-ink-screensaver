@@ -27,6 +27,7 @@ import androidx.core.os.LocaleListCompat
 import com.eink.screensaver.BootReceiver
 import com.eink.screensaver.PrefsManager
 import com.eink.screensaver.R
+import com.eink.screensaver.SystemBrightness
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -36,6 +37,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var permissionStatusText: TextView
     private lateinit var btnGrantNotification: Button
     private lateinit var btnGrantFullScreen: Button
+    private lateinit var btnGrantWriteSettings: Button
     private lateinit var languageGroup: RadioGroup
 
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -45,6 +47,12 @@ class SettingsActivity : AppCompatActivity() {
     }
 
     private val fullScreenPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) {
+        updateUI()
+    }
+
+    private val writeSettingsLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
         updateUI()
@@ -62,6 +70,7 @@ class SettingsActivity : AppCompatActivity() {
         permissionStatusText = findViewById(R.id.permissionStatusText)
         btnGrantNotification = findViewById(R.id.btnGrantNotification)
         btnGrantFullScreen = findViewById(R.id.btnGrantFullScreen)
+        btnGrantWriteSettings = findViewById(R.id.btnGrantWriteSettings)
         languageGroup = findViewById(R.id.languageGroup)
 
         // Language selector
@@ -88,6 +97,7 @@ class SettingsActivity : AppCompatActivity() {
         toggleButton.setOnClickListener { toggleService() }
         btnGrantNotification.setOnClickListener { requestNotificationPermission() }
         btnGrantFullScreen.setOnClickListener { requestFullScreenPermission() }
+        btnGrantWriteSettings.setOnClickListener { requestWriteSettingsPermission() }
 
         // Module settings
         findViewById<Button>(R.id.btnModuleSettings).setOnClickListener {
@@ -142,26 +152,37 @@ class SettingsActivity : AppCompatActivity() {
         val isEnabled = PrefsManager.isEnabled(this)
         val hasNotif = hasNotificationPermission()
         val hasFullScreen = hasFullScreenPermission()
-        val allPermissions = hasNotif && hasFullScreen
+        val hasWriteSettings = SystemBrightness.canWrite(this)
+        // WRITE_SETTINGS only suppresses the frontlight flash, so it gates
+        // nothing \u2014 but the section stays up while it is missing, otherwise the
+        // offer would be undiscoverable.
+        val requiredPermissions = hasNotif && hasFullScreen
 
-        if (allPermissions) {
+        if (requiredPermissions && hasWriteSettings) {
             permissionSection.visibility = View.GONE
         } else {
             permissionSection.visibility = View.VISIBLE
             val notifMark = if (hasNotif) "\u2713" else "\u2717"
             val fsMark = if (hasFullScreen) "\u2713" else "\u2717"
-            permissionStatusText.text =
-                getString(R.string.notifications_label, notifMark) + "\n" +
-                getString(R.string.fullscreen_notifications_label, fsMark)
+            val wsMark = if (hasWriteSettings) "\u2713" else "\u2717"
+            permissionStatusText.text = buildString {
+                append(getString(R.string.notifications_label, notifMark)).append("\n")
+                append(getString(R.string.fullscreen_notifications_label, fsMark)).append("\n")
+                append(getString(R.string.write_settings_label, wsMark))
+                if (!hasWriteSettings) {
+                    append("\n").append(getString(R.string.write_settings_hint))
+                }
+            }
             btnGrantNotification.isEnabled = !hasNotif
             btnGrantFullScreen.isEnabled = !hasFullScreen
+            btnGrantWriteSettings.isEnabled = !hasWriteSettings
         }
 
-        toggleButton.isEnabled = allPermissions
+        toggleButton.isEnabled = requiredPermissions
 
         if (isEnabled) {
             toggleButton.text = getString(R.string.disable_screensaver)
-            if (allPermissions) {
+            if (requiredPermissions) {
                 statusText.text = getString(R.string.status_active) + " \u00B7 " + getString(R.string.permissions_granted)
             } else {
                 statusText.text = getString(R.string.status_active)
@@ -169,7 +190,7 @@ class SettingsActivity : AppCompatActivity() {
             statusText.setTextColor(ContextCompat.getColor(this, android.R.color.holo_green_dark))
         } else {
             toggleButton.text = getString(R.string.enable_screensaver)
-            if (allPermissions) {
+            if (requiredPermissions) {
                 statusText.text = getString(R.string.status_off) + " \u00B7 " + getString(R.string.permissions_granted)
             } else {
                 statusText.text = getString(R.string.status_needs_permissions)
@@ -232,6 +253,23 @@ class SettingsActivity : AppCompatActivity() {
             } catch (_: Exception) {
                 Toast.makeText(this, R.string.open_settings_hint, Toast.LENGTH_LONG).show()
             }
+        }
+    }
+
+    private fun requestWriteSettingsPermission() {
+        try {
+            val intent = Intent(
+                Settings.ACTION_MANAGE_WRITE_SETTINGS,
+                Uri.parse("package:$packageName")
+            )
+            writeSettingsLauncher.launch(intent)
+            return
+        } catch (_: Exception) {}
+
+        try {
+            writeSettingsLauncher.launch(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS))
+        } catch (_: Exception) {
+            Toast.makeText(this, R.string.open_settings_hint, Toast.LENGTH_LONG).show()
         }
     }
 }

@@ -6,12 +6,15 @@ import android.content.SharedPreferences
 object PrefsManager {
 
     const val NO_SAVED_FRONTLIGHT = -1
+    const val NO_SAVED_BRIGHTNESS = -1
 
     private const val PREFS_NAME = "eink_screensaver_prefs"
     private const val KEY_ENABLED = "screensaver_enabled"
     private const val KEY_UPDATE_INTERVAL = "update_interval_minutes"
     private const val KEY_SHOW_DATE = "show_date"
     private const val KEY_SAVED_FRONTLIGHT = "saved_frontlight_level"
+    private const val KEY_SAVED_BRIGHTNESS = "saved_system_brightness"
+    private const val KEY_SAVED_BRIGHTNESS_MODE = "saved_system_brightness_mode"
 
     // Weather
     private const val KEY_WEATHER_CITY = "weather_city"
@@ -106,6 +109,33 @@ object PrefsManager {
     fun setSavedFrontlight(context: Context, level: Int) {
         // commit(), not apply(): written right before the device goes to sleep.
         prefs(context).edit().putInt(KEY_SAVED_FRONTLIGHT, level).commit()
+    }
+
+    /**
+     * The user's own `Settings.System.SCREEN_BRIGHTNESS` and auto-brightness
+     * mode, saved while [SystemBrightness] holds the screen dark for a lock
+     * cycle. [NO_SAVED_BRIGHTNESS] means we are not holding it.
+     */
+    fun getSavedBrightness(context: Context): Int =
+        prefs(context).getInt(KEY_SAVED_BRIGHTNESS, NO_SAVED_BRIGHTNESS)
+
+    fun getSavedBrightnessMode(context: Context): Int =
+        prefs(context).getInt(KEY_SAVED_BRIGHTNESS_MODE, 0)
+
+    fun setSavedBrightness(context: Context, level: Int, mode: Int) {
+        // commit(), not apply(): written right before the device goes to sleep,
+        // and losing it would strand the user's screen dark.
+        prefs(context).edit()
+            .putInt(KEY_SAVED_BRIGHTNESS, level)
+            .putInt(KEY_SAVED_BRIGHTNESS_MODE, mode)
+            .commit()
+    }
+
+    fun clearSavedBrightness(context: Context) {
+        prefs(context).edit()
+            .remove(KEY_SAVED_BRIGHTNESS)
+            .remove(KEY_SAVED_BRIGHTNESS_MODE)
+            .commit()
     }
 
     // ════════ Weather ════════
