@@ -142,7 +142,6 @@ class LockScreenActivity : AppCompatActivity() {
         window.attributes = window.attributes.apply {
             screenBrightness = 0.0f
         }
-        SystemBrightness.dim(this)
         EinkCompat.dimFrontlight(this)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -280,10 +279,8 @@ class LockScreenActivity : AppCompatActivity() {
     private fun cancelNotificationAndFinish() {
         stopUnlockPolling()
         // The poll is the reliable unlock signal here — USER_PRESENT proved flaky —
-        // so give the user their brightness back from this path too, not only from
-        // the service.
+        // so restore the frontlight from this path too, not just from the service.
         EinkCompat.restoreFrontlight(this)
-        SystemBrightness.restore(this)
         try {
             val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.cancel(ScreenSaverService.LOCKSCREEN_NOTIFICATION_ID)
