@@ -27,6 +27,7 @@ import androidx.core.os.LocaleListCompat
 import com.eink.screensaver.BootReceiver
 import com.eink.screensaver.PrefsManager
 import com.eink.screensaver.R
+import com.eink.screensaver.SleepAccessibilityService
 
 class SettingsActivity : AppCompatActivity() {
 
@@ -36,6 +37,7 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var permissionStatusText: TextView
     private lateinit var btnGrantNotification: Button
     private lateinit var btnGrantFullScreen: Button
+    private lateinit var btnGrantA11y: Button
     private lateinit var languageGroup: RadioGroup
 
     private val notificationPermissionLauncher = registerForActivityResult(
@@ -62,6 +64,7 @@ class SettingsActivity : AppCompatActivity() {
         permissionStatusText = findViewById(R.id.permissionStatusText)
         btnGrantNotification = findViewById(R.id.btnGrantNotification)
         btnGrantFullScreen = findViewById(R.id.btnGrantFullScreen)
+        btnGrantA11y = findViewById(R.id.btnGrantA11y)
         languageGroup = findViewById(R.id.languageGroup)
 
         // Language selector
@@ -88,6 +91,7 @@ class SettingsActivity : AppCompatActivity() {
         toggleButton.setOnClickListener { toggleService() }
         btnGrantNotification.setOnClickListener { requestNotificationPermission() }
         btnGrantFullScreen.setOnClickListener { requestFullScreenPermission() }
+        btnGrantA11y.setOnClickListener { openAccessibilitySettings() }
 
         // Module settings
         findViewById<Button>(R.id.btnModuleSettings).setOnClickListener {
@@ -142,19 +146,28 @@ class SettingsActivity : AppCompatActivity() {
         val isEnabled = PrefsManager.isEnabled(this)
         val hasNotif = hasNotificationPermission()
         val hasFullScreen = hasFullScreenPermission()
+        val hasA11y = SleepAccessibilityService.isEnabledInSettings(this)
+        // The accessibility service only suppresses the frontlight flash, so it
+        // gates nothing \u2014 but the section stays up while it is off, otherwise the
+        // offer would be undiscoverable.
         val allPermissions = hasNotif && hasFullScreen
 
-        if (allPermissions) {
+        if (allPermissions && hasA11y) {
             permissionSection.visibility = View.GONE
         } else {
             permissionSection.visibility = View.VISIBLE
             val notifMark = if (hasNotif) "\u2713" else "\u2717"
             val fsMark = if (hasFullScreen) "\u2713" else "\u2717"
-            permissionStatusText.text =
-                getString(R.string.notifications_label, notifMark) + "\n" +
-                getString(R.string.fullscreen_notifications_label, fsMark)
+            val a11yMark = if (hasA11y) "\u2713" else "\u2717"
+            permissionStatusText.text = buildString {
+                append(getString(R.string.notifications_label, notifMark)).append("\n")
+                append(getString(R.string.fullscreen_notifications_label, fsMark)).append("\n")
+                append(getString(R.string.a11y_label, a11yMark))
+                if (!hasA11y) append("\n").append(getString(R.string.a11y_hint))
+            }
             btnGrantNotification.isEnabled = !hasNotif
             btnGrantFullScreen.isEnabled = !hasFullScreen
+            btnGrantA11y.isEnabled = !hasA11y
         }
 
         toggleButton.isEnabled = allPermissions
@@ -195,6 +208,14 @@ class SettingsActivity : AppCompatActivity() {
     private fun requestNotificationPermission() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    private fun openAccessibilitySettings() {
+        try {
+            fullScreenPermissionLauncher.launch(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+        } catch (_: Exception) {
+            Toast.makeText(this, R.string.open_settings_hint, Toast.LENGTH_LONG).show()
         }
     }
 
