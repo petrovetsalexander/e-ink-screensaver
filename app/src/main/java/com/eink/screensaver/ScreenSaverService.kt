@@ -145,18 +145,22 @@ class ScreenSaverService : Service() {
             return
         }
 
-        // Acquire a wake lock that turns the screen on — needed since we no longer
-        // use fullScreenIntent. SCREEN_BRIGHT_WAKE_LOCK is deprecated but still
-        // functional and is the only way to wake the screen from a service without
-        // fullScreenIntent. The activity's brightness=0.0f overrides immediately.
+        // CPU-only wake lock: it keeps this service alive long enough to launch the
+        // activity and let it draw, but deliberately does NOT touch the display.
+        //
+        // Waking the screen from here (SCREEN_DIM_WAKE_LOCK|ACQUIRE_CAUSES_WAKEUP)
+        // turned the frontlight on at the system dim level, because at that moment
+        // no window of ours exists yet to override brightness — LockScreenActivity
+        // only applies screenBrightness=0.0f once it reaches onCreate. That was the
+        // visible flash on lock. The activity's own setTurnScreenOn(true) wakes the
+        // display instead, with brightness 0 already set on its window.
         releaseWakeLock()
-        @Suppress("DEPRECATION")
         wakeLock = powerManager.newWakeLock(
-            PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            PowerManager.PARTIAL_WAKE_LOCK,
             "EinkScreensaver:ScreenOn"
         )
         wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
-        Log.d(TAG, "Screen-on WakeLock acquired")
+        Log.d(TAG, "CPU WakeLock acquired; activity turns the screen on")
 
         val intent = Intent(this, LockScreenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -164,7 +168,8 @@ class ScreenSaverService : Service() {
             addFlags(Intent.FLAG_ACTIVITY_NO_ANIMATION)
         }
 
-        // Small delay ensures screen is on before launching activity
+        // Small delay lets the system finish going to sleep before we launch;
+        // the activity then turns the screen back on itself.
         handler.postDelayed({
             startActivity(intent)
         }, LAUNCH_DELAY_MS)
