@@ -92,6 +92,25 @@ Default strings are English (`values/`), with a Russian translation (`values-ru/
 
 - Pure black on pure white, no gradients or shadows; `section_border` is a hairline rectangle.
 - Brightness is pinned to `0.0f` by the activity (there is no brightness preference any more).
+
+### The frontlight flash on lock — root cause
+
+Measured on the HiBreak, not inferred. The frontlight is Android's own `/sys/class/leds/lcd-backlight`, driven by `Settings.System.SCREEN_BRIGHTNESS` (240 on this device, auto-brightness off). It is **not** the xrz `vendor.xrz.global_brightness_level`, which stayed 0 through 182 samples across a full lock cycle. A `logcat -v time` of one cycle:
+
+```
+56.301 Brightness [0.0]       reason 'screen_off', previous 'manual'
+56.305 write 0 to /sys/class/leds/lcd-backlight/brightness
+56.880 Brightness [0.9409449] reason 'manual', previous 'screen_off'
+57.026 write 240 to /sys/class/leds/lcd-backlight/brightness   ← the flash
+57.265 Brightness [0.0]       reason 'override', previous 'manual'
+57.266 write 1 to /sys/class/leds/lcd-backlight/brightness
+```
+
+On every wake `DisplayPowerController` restores the user's manual level first and only then recomputes with our window's `screenBrightness = 0.0f` as `reason=override` — 240 ms later. Having the window already added, drawn and focused shortens the gap to ~141 ms but does **not** remove it: the manual restore is unconditional. So no amount of reordering our activity launch fixes this, and neither does the vendor SDK.
+
+What would: bring `Settings.System.SCREEN_BRIGHTNESS` itself down for the duration of the lock cycle (needs `WRITE_SETTINGS`, and the same save-in-prefs/restore-on-service-start guard `saved_frontlight_level` already uses, or a process death strands the user at brightness 1). Untried alternative: `DisplayPolicyManager.setBrightnessLevelForPackage(packageName, …)`, now reachable through the hidden-API bypass.
+
+Unrelated but seen in the same logs: `com.xrz.standby/com.xrz.settings.screensaver.ScreenSaveActivity` launches on the same screen-off and is torn down once our activity wins, and `com.xrz.screensaver` was observed waking the power group out of Dozing about once a second. Worth a look for the sleep-drain question.
 - Every redraw begins with the black→white flash for a full panel refresh; keep this in mind before adding partial-update paths.
 - The update interval is a battery/ghosting trade-off, not a UI nicety — each tick costs a wake lock and a panel refresh.
 
