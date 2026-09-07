@@ -106,24 +106,32 @@ Measured on the HiBreak, not inferred. The frontlight is Android's own `/sys/cla
 57.266 write 1 to /sys/class/leds/lcd-backlight/brightness
 ```
 
-On every wake `DisplayPowerController` restores the user's manual level first and only then recomputes with our window's `screenBrightness = 0.0f` as `reason=override` — 240 ms later. Having the window already added, drawn and focused shortens the gap to ~141 ms but does **not** remove it: the manual restore is unconditional. So no amount of reordering our activity launch fixes this, and neither does the vendor SDK.
+On every wake `DisplayPowerController` restores the user's manual level first and only then recomputes with our window's `screenBrightness = 0.0f` as `reason=override` — 240 ms later. Having the window already added, drawn and focused shortens the gap to ~141 ms but does **not** remove it: the manual restore is unconditional. Reordering our activity launch does not fix this, and neither does any brightness API — see below for what does.
 
-Three candidate fixes have been tried and reverted. All measured, none guessed.
+**The fix, and it is not a brightness API.** The stock screensaver never flashes because its wake carries a flag this firmware's `DisplayPowerController` prints as `isWakeUpOnly=true`; while that is set the panel takes its update and the backlight is never written. `dexdump` of `services.jar` shows `PowerManagerService.updateGlobalWakefulnessLocked` setting it from a hardcoded string:
 
-1. **`DisplayPolicyManager.setBrightnessLevelForPackage`** — see the vendor-layer section. The call works end to end and the backlight ignores it.
-2. **`Settings.System.SCREEN_BRIGHTNESS` via `WRITE_SETTINGS`** — `DisplayPowerController` latches the manual level on the way down, does not re-read the setting during the wake, and persists its own value back over ours within 500 ms. A plain `settings put system screen_brightness 1` from adb bounces back to 240 the same way, so it is neither a permission nor a call-site-timing problem.
-3. **The vendor's own wake lock tag** — and this one is the cautionary tale. The stock screensaver never flashes because its wake carries a flag this firmware's `DisplayPowerController` prints as `isWakeUpOnly=true`, and while it is set the backlight is never written. `dexdump` of `services.jar` shows `PowerManagerService.updateGlobalWakefulnessLocked` setting it from a hardcoded string:
+```
+mIsWakeUpOnly = (reason == WAKE_REASON_APPLICATION
+                 && "com.xrz.screensaver".equals(details))
+```
 
-   ```
-   mIsWakeUpOnly = (reason == WAKE_REASON_APPLICATION
-                    && "com.xrz.screensaver".equals(details))
-   ```
+For an `ACQUIRE_CAUSES_WAKEUP` wake lock the "details" string is the tag, so `ScreenSaverService.WAKE_TAG_NO_BACKLIGHT` names ours `"com.xrz.screensaver"` and gets the stock screensaver's flash-free wake.
 
-   For an `ACQUIRE_CAUSES_WAKEUP` wake lock the "details" string is the tag, so naming ours `"com.xrz.screensaver"` did suppress the flash. It also **bricked unlocking**: the flag stays set while the device is awake, the panel never properly powers on, the touchscreen does not respond, and with `screen_off_timeout` at 10 minutes the device sits in that state — and every power press just hands `SCREEN_OFF` back to our service, which re-wakes with the tag again. The stock app escapes because at uid 1000 it can call `PowerManager.goToSleep()` afterwards; that needs `DEVICE_POWER`, a signature permission. **Do not reach for this tag again without solving the exit path first.**
+**The tag alone is a trap.** The flag stays set for as long as the device is awake, and in that state the panel never properly powers on and the touchscreen ignores input — the keyguard is visible but dead to touch. A first attempt shipped the tag without an exit and made the phone very hard to unlock: `screen_off_timeout` is 10 minutes here, and every power press just handed `SCREEN_OFF` back to the service, which woke the device again with the tag. The device never got a normal wake.
 
-   **The exit path itself is confirmed to work**, measured with the service force-stopped so it could not fight back: an explicit sleep (`input keyevent 223`) took the device to `mWakefulness=Asleep`, and the following power press came back as `WAKE_REASON_POWER_BUTTON` with `isWakeUpOnly=false` and the backlight restored to 240. So the mechanism is sound; what is missing is a way for the app to issue that sleep, plus a guard so it does not answer its own `SCREEN_OFF` by waking again — with the service running, `keyevent 223` was immediately undone by our own receiver, which is the loop that bricked unlocking.
+What clears it is an explicit sleep, after which the next wake is an ordinary `WAKE_REASON_POWER_BUTTON` with the backlight restored. The stock app does that with `PowerManager.goToSleep()` at uid 1000; `DEVICE_POWER` is a signature permission, so `SleepAccessibilityService` calls `performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)` instead — the same thing reachable by an ordinary app, at the price of one accessibility toggle. It reads nothing and consumes no events.
 
-   Two APIs can issue the sleep from a third-party app, both present on this firmware: `AccessibilityService.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)` (API 28, so it clears `minSdk`) behind an accessibility toggle, or `DevicePolicyManager.lockNow()` behind device-admin activation — the latter also blocks uninstall until the admin is deactivated, which is poor for something meant to be shared with other Bigme owners. The structurally cleaner alternative is to stop waking a sleeping display at all and become a `DreamService`, which the platform starts *before* the display sleeps; that is the shape the stock app has.
+Three interlocks make this safe to run, and they are not optional:
+
+- **The tag is only taken when it can be undone.** `canUseVendorWake()` requires `SleepAccessibilityService.isConnected` at that moment; otherwise the old CPU-only wake lock is used and `LockScreenActivity` turns the screen on itself.
+- **A latch.** `SCREEN_OFF` arriving within `SELF_SLEEP_GRACE_MS` of our own sleep is ignored. Answering our own sleep with another wake is the loop that broke the phone.
+- **A rate limit and a circuit breaker.** More than `BREAKER_MAX_WAKES` vendor wakes in a minute, a failed lock action, or the device still interactive 1.5 s after one, all set `vendorWakeDisabled` for the life of the process. Every failure mode degrades to the old behaviour rather than to a phone that will not unlock.
+
+Measured over three lock/wake cycles, and confirmed by the user in normal use: no `lcd-backlight` write above 1 on any lock, `mWakefulness=Asleep` after each, the latch catching our own `SCREEN_OFF` every time, `isWakeUpOnly=false` on every wake, breaker never tripped. **One flash remains**, on the first lock after a fresh `LockScreenActivity` launch — launching an activity into a sleeping display is a separate cause, and it does not affect the periodic clock updates. Keeping the activity resident across unlock instead of finishing it would close that too.
+
+**Distribution catch:** Android 13+ blocks accessibility services for sideloaded apps. The system silently reverts `enabled_accessibility_services` until the user opens App info → ⋮ → *Allow restricted settings*. Any install instructions have to say so; over adb the equivalent is `appops set com.eink.screensaver ACCESS_RESTRICTED_SETTINGS allow`.
+
+Two other candidates were measured and ruled out. **`DisplayPolicyManager.setBrightnessLevelForPackage`** — see the vendor-layer section; the call works end to end and the backlight ignores it. **`Settings.System.SCREEN_BRIGHTNESS` via `WRITE_SETTINGS`** — `DisplayPowerController` latches the manual level on the way down, does not re-read the setting during the wake, and persists its own value back over ours within 500 ms; a plain `settings put system screen_brightness 1` from adb bounces back to 240 the same way, so it is neither a permission nor a call-site-timing problem. `DreamService` was considered and rejected: dreams are disabled on this device (`screensaver_enabled=0`, `screensaver_activate_on_sleep=0`), those are `Settings.Secure` and need `WRITE_SECURE_SETTINGS`, and a dream does not start on a power press at all — which is the gesture this app exists for.
 
 Untested lead: `screen_brightness_cold` / `screen_brightness_warm`, which suggest the Bigme frontlight has two channels this device exposes separately.
 
