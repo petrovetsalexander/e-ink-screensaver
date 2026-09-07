@@ -5,10 +5,13 @@ import android.content.SharedPreferences
 
 object PrefsManager {
 
+    const val NO_SAVED_FRONTLIGHT = -1
+
     private const val PREFS_NAME = "eink_screensaver_prefs"
     private const val KEY_ENABLED = "screensaver_enabled"
     private const val KEY_UPDATE_INTERVAL = "update_interval_minutes"
     private const val KEY_SHOW_DATE = "show_date"
+    private const val KEY_SAVED_FRONTLIGHT = "saved_frontlight_level"
 
     // Weather
     private const val KEY_WEATHER_CITY = "weather_city"
@@ -87,6 +90,22 @@ object PrefsManager {
 
     fun setShowDate(context: Context, show: Boolean) {
         prefs(context).edit().putBoolean(KEY_SHOW_DATE, show).apply()
+    }
+
+    // ════════ Frontlight ════════
+
+    /**
+     * Hardware frontlight level saved before EinkCompat dimmed it, or
+     * [NO_SAVED_FRONTLIGHT] when the light is at the user's own level.
+     * Persisted so a process death cannot strand the panel light at 0 —
+     * the service restores it on next start.
+     */
+    fun getSavedFrontlight(context: Context): Int =
+        prefs(context).getInt(KEY_SAVED_FRONTLIGHT, NO_SAVED_FRONTLIGHT)
+
+    fun setSavedFrontlight(context: Context, level: Int) {
+        // commit(), not apply(): written right before the device goes to sleep.
+        prefs(context).edit().putInt(KEY_SAVED_FRONTLIGHT, level).commit()
     }
 
     // ════════ Weather ════════

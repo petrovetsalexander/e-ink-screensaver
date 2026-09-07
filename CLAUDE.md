@@ -23,7 +23,7 @@ Versions live in `gradle/libs.versions.toml`; `app/build.gradle.kts` references 
 No tests, no lint configuration, no CI — there is no "run a single test" command, and `lint.abortOnError` is off. Verification is manual: install on a device and watch logcat.
 
 ```bash
-adb logcat -s ScreenSaverSvc LockScreenAct NetworkFetcher WeatherFetcher NewsFetcher BookmateFetcher ImageCache
+adb logcat -s ScreenSaverSvc LockScreenAct EinkCompat NetworkFetcher WeatherFetcher NewsFetcher BookmateFetcher ImageCache
 ```
 
 ## Project Overview
@@ -94,6 +94,17 @@ Default strings are English (`values/`), with a Russian translation (`values-ru/
 - Brightness is pinned to `0.0f` by the activity (there is no brightness preference any more).
 - Every redraw begins with the black→white flash for a full panel refresh; keep this in mind before adding partial-update paths.
 - The update interval is a battery/ghosting trade-off, not a UI nicety — each tick costs a wake lock and a panel refresh.
+
+### The vendor layer (`EinkCompat`)
+
+`EinkCompat` is a reflection bridge to Bigme's undocumented xrz framework (`xrz.framework.manager.XrzEinkManager` / `XrzEinkManagerInternal`), mapped in [imedwei/inksdk](https://github.com/imedwei/inksdk)'s `docs/bigme-sdk-reverse-engineered.md`. The classes are reachable from an ordinary app UID with no permission; `EinkCompat` falls back to a `PathClassLoader` over `/system/framework/xrz.framework.server.jar`, then to no-op. Check `EinkCompat.isSupported` and keep the portable path alive next to every vendor call — an OTA can remove this API without warning.
+
+Two things it buys:
+
+- **Hardware frontlight.** `dimFrontlight()` / `restoreFrontlight()` drive the panel light directly, so `ScreenSaverService.onScreenOff()` can kill it *before* any window of ours exists — `window.screenBrightness = 0.0f` only applies once `LockScreenActivity`'s window is added, which is too late to stop the system's dim level from flashing the light. The user's level is saved in prefs (`saved_frontlight_level`, sentinel `PrefsManager.NO_SAVED_FRONTLIGHT`) so a process death can't strand the light at 0; the service restores it in `onCreate`. Restore paths: the unlock poll in `cancelNotificationAndFinish()` (the reliable one), `USER_PRESENT`, `ACTION_STOP`, `onDestroy`.
+- **Real panel refresh.** `forceGlobalRefresh(MODE_CLEAN)` replaces the black→white flash on the vendor path, saving two full frames and 100 ms of wake lock per launch. The window is also pinned to `MODE_GC16` via `setWindowRefreshMode`. Waveform constants (`MODE_DU`, `MODE_A2`, `MODE_REGAL`, …) are in `EinkCompat` if a partial-update path is ever wanted.
+
+Verify the device before assuming any of it works: `adb shell service list | grep -iE 'xrz|handwritten'`.
 
 ## Gotchas
 
