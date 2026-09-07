@@ -200,7 +200,7 @@ class LockScreenActivity : AppCompatActivity() {
         // Ask the panel for a full flashing waveform on every update of this window.
         // No-op off xrz firmware, where the black→white flash in forceFullEinkRefresh()
         // remains the only way to get one.
-        EinkCompat.setWindowRefreshMode(this, window, EinkCompat.MODE_GC16)
+        EinkCompat.setWindowRefreshMode(window, EinkCompat.MODE_GC16)
 
         // Force full e-ink refresh: briefly show black screen, then draw content.
         // This forces every pixel to transition (full GC16 refresh), clearing ghosting.

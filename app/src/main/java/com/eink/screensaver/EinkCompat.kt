@@ -3,30 +3,33 @@ package com.eink.screensaver
 import android.content.Context
 import android.util.Log
 import android.view.Window
-import dalvik.system.PathClassLoader
 import java.lang.reflect.Method
 
 /**
- * Reflection bridge to Bigme's undocumented xrz framework
- * (`xrz.framework.manager.*`, present on xrz-based firmware).
+ * Reflection bridge to Bigme's undocumented xrz framework, verified against
+ * HiBreak firmware Bigme_HiBreak_V1.0_20260306 (Android 14, SDK 34).
  *
- * Two things this buys us that the public Android API cannot:
+ * What is actually on the device (`dexdump` of the pulled framework.jar):
  *
- *  1. **Hardware frontlight control.** [setFrontlight] drives the panel light
- *     directly, so the service can kill it in `onScreenOff()` *before* any
- *     window of ours exists. `WindowManager.LayoutParams.screenBrightness`
- *     only applies once the window is added, which is too late to stop the
- *     system's dim level from flashing the light on wake.
- *  2. **A real global panel refresh.** [forceGlobalRefresh] asks the HAL for
- *     one clearing waveform pass instead of the black -> white flash, which
- *     costs two extra full frames and 100 ms of wake lock on every redraw.
+ *  - `xrz.framework.manager.*` lives in `framework.jar/classes5.dex`, which IS
+ *    on BOOTCLASSPATH, so a plain `Class.forName` reaches it. Note that
+ *    `/system/framework/xrz.framework.server.jar` holds only the *server* half
+ *    (`xrz.framework.server.*`) — there is no point pointing a PathClassLoader
+ *    at it, so there is no classloader fallback here.
+ *  - `XrzEinkManager.setRefreshModeByWindow(Window, int)` is a one-line wrapper
+ *    around a vendor-added **`Window.setRefreshMode(int)`**. That is in-process
+ *    with nothing to gate it, so [setWindowRefreshMode] calls Window directly.
+ *  - `XrzEinkManager.forceGlobalRefresh(int)` delegates to a JNI method.
+ *  - `XrzEinkManagerInternal.setScreenBrightnessLevel(int)` is nothing but
+ *    `SystemProperties.set("vendor.xrz.global_brightness_level", …)`. That
+ *    property is `vendor_xrz_prop` and the device runs SELinux **Enforcing**,
+ *    so the write is very likely refused for a third-party app — see
+ *    [setFrontlight], which verifies by reading the value back.
  *
- * Every entry point is guarded: if the classes are missing (any non-xrz
- * device) or a call throws, the method returns false and the caller falls
- * back to the portable path. Probe with [isSupported] first.
- *
- * The API is undocumented and can disappear on an OTA, so nothing here is
- * allowed to be load-bearing.
+ * Everything here is also subject to Android 14 hidden-API enforcement, which
+ * `adb shell` / `app_process` probes are exempt from. Only a run inside the app
+ * process proves a call works, so every entry point is guarded and every caller
+ * keeps its portable path.
  */
 object EinkCompat {
 
@@ -34,14 +37,16 @@ object EinkCompat {
 
     private const val CLASS_MANAGER = "xrz.framework.manager.XrzEinkManager"
     private const val CLASS_INTERNAL = "xrz.framework.manager.XrzEinkManagerInternal"
-    private const val FRAMEWORK_JAR = "/system/framework/xrz.framework.server.jar"
 
-    // xrz.framework.manager.EinkRefreshMode constants.
+    // xrz.framework.manager.EinkRefreshMode, read off this firmware. Note
+    // EINK_DEFAULT_MODE is 0 here, not the 178 some write-ups quote — 178 is
+    // EINK_NORMAL_MODE, which is what ro.vendor.xrz.default_refresh_mode holds.
     const val MODE_DU = 2
     const val MODE_GC16 = 4
     const val MODE_A2 = 16
     const val MODE_CLEAN = 176
-    const val MODE_DEFAULT = 178
+    const val MODE_DEFAULT = 0
+    const val MODE_NORMAL = 178
     const val MODE_FAST = 179
     const val MODE_REGAL = 180
 
@@ -55,13 +60,13 @@ object EinkCompat {
     private val globalRefresh: Method? by lazy {
         method(managerClass, "forceGlobalRefresh", Int::class.javaPrimitiveType)
     }
-    private val refreshModeByWindow: Method? by lazy {
-        method(managerClass, "setRefreshModeByWindow", Window::class.java, Int::class.javaPrimitiveType)
+    private val windowSetRefreshMode: Method? by lazy {
+        method(Window::class.java, "setRefreshMode", Int::class.javaPrimitiveType)
     }
 
-    /** True when the vendor framework answered at least the frontlight calls. */
+    /** True when the vendor framework classes resolved in this process. */
     val isSupported: Boolean by lazy {
-        val ok = getBrightness != null && setBrightness != null
+        val ok = internalClass != null && managerClass != null
         Log.d(TAG, "xrz framework ${if (ok) "available" else "not available"} on this device")
         ok
     }
@@ -80,12 +85,23 @@ object EinkCompat {
         null
     }
 
+    /**
+     * Under the hood this is a `vendor.xrz.*` SystemProperties write, which
+     * SELinux may refuse without throwing anything useful, so read the value
+     * back and report whether it actually took.
+     */
     fun setFrontlight(level: Int): Boolean = try {
         val m = setBrightness
         if (m == null) false else {
             m.invoke(null, level)
-            Log.d(TAG, "frontlight -> $level")
-            true
+            val readBack = getFrontlight()
+            if (readBack == level) {
+                Log.d(TAG, "frontlight -> $level")
+                true
+            } else {
+                Log.w(TAG, "frontlight write refused: asked $level, still $readBack")
+                false
+            }
         }
     } catch (e: Throwable) {
         Log.w(TAG, "setScreenBrightnessLevel($level) failed: ${e.message}")
@@ -134,40 +150,30 @@ object EinkCompat {
     /**
      * Pin a window to a waveform mode. [MODE_GC16] gives the lock screen a full
      * flashing refresh on every update, which is what we want anyway.
+     *
+     * Goes straight to the vendor-added `Window.setRefreshMode(int)` rather than
+     * through `XrzEinkManager`, which only wraps that same call — one less object
+     * and one less class to resolve.
      */
-    fun setWindowRefreshMode(context: Context, window: Window, mode: Int): Boolean = try {
-        val cls = managerClass
-        val m = refreshModeByWindow
-        if (cls == null || m == null) false else {
-            val instance = cls.getConstructor(Context::class.java).newInstance(context)
-            m.invoke(instance, window, mode)
+    fun setWindowRefreshMode(window: Window, mode: Int): Boolean = try {
+        val m = windowSetRefreshMode
+        if (m == null) false else {
+            m.invoke(window, mode)
             true
         }
     } catch (e: Throwable) {
-        Log.w(TAG, "setRefreshModeByWindow($mode) failed: ${e.message}")
+        Log.w(TAG, "Window.setRefreshMode($mode) failed: ${e.message}")
         false
     }
 
     // ════════ Reflection plumbing ════════
 
-    /**
-     * The xrz classes are injected into the boot classloader at runtime even
-     * though the jar is on neither BOOTCLASSPATH nor SYSTEMSERVERCLASSPATH, so
-     * a plain Class.forName normally works. The PathClassLoader fallback is
-     * there in case a firmware build stops doing that.
-     */
-    private fun loadClass(name: String): Class<*>? {
-        try {
-            return Class.forName(name)
-        } catch (e: Throwable) {
-            Log.d(TAG, "$name not on the boot classpath, trying $FRAMEWORK_JAR")
-        }
-        return try {
-            Class.forName(name, false, PathClassLoader(FRAMEWORK_JAR, EinkCompat::class.java.classLoader))
-        } catch (e: Throwable) {
-            Log.d(TAG, "$name unavailable: ${e.message}")
-            null
-        }
+    /** The xrz classes ship inside framework.jar, which is on BOOTCLASSPATH. */
+    private fun loadClass(name: String): Class<*>? = try {
+        Class.forName(name)
+    } catch (e: Throwable) {
+        Log.d(TAG, "$name unavailable: ${e.message}")
+        null
     }
 
     private fun method(cls: Class<*>?, name: String, vararg args: Class<*>?): Method? = try {
