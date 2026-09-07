@@ -23,10 +23,11 @@ import java.lang.reflect.Method
  *    with nothing to gate it, so [setWindowRefreshMode] calls Window directly.
  *  - `XrzEinkManager.forceGlobalRefresh(int)` delegates to a JNI method.
  *  - `XrzEinkManagerInternal.setScreenBrightnessLevel(int)` is nothing but
- *    `SystemProperties.set("vendor.xrz.global_brightness_level", …)`. That
- *    property is `vendor_xrz_prop` and the device runs SELinux **Enforcing**,
- *    so the write is very likely refused for a third-party app — see
- *    [setFrontlight], which verifies by reading the value back.
+ *    `SystemProperties.set("vendor.xrz.global_brightness_level", …)`. The write
+ *    does go through from an ordinary app UID — SELinux does not stand in the
+ *    way, verified by [setFrontlight]'s read-back — but on the HiBreak that
+ *    property drives nothing. The frontlight there is Android's own
+ *    `/sys/class/leds/lcd-backlight`, owned by `DisplayPowerController`.
  *
  * All of it sits behind Android's hidden-API restriction: measured on the
  * device, `Class.forName` resolves the xrz classes but every `getMethod` throws
@@ -45,6 +46,7 @@ object EinkCompat {
 
     private const val CLASS_MANAGER = "xrz.framework.manager.XrzEinkManager"
     private const val CLASS_INTERNAL = "xrz.framework.manager.XrzEinkManagerInternal"
+    private const val CLASS_POLICY_MANAGER = "xrz.framework.manager.DisplayPolicyManager"
 
     // xrz.framework.manager.EinkRefreshMode, read off this firmware. Note
     // EINK_DEFAULT_MODE is 0 here, not the 178 some write-ups quote — 178 is
@@ -74,6 +76,15 @@ object EinkCompat {
     }
     private val windowSetRefreshMode: Method? by lazy {
         method(Window::class.java, "setRefreshMode", Int::class.javaPrimitiveType)
+    }
+    private val getDisplayPolicyManager: Method? by lazy {
+        method(managerClass, "getDisplayPolicyManager")
+    }
+    private val setPackageBrightnessMethod: Method? by lazy {
+        method(
+            loadClass(CLASS_POLICY_MANAGER), "setBrightnessLevelForPackage",
+            String::class.java, Int::class.javaPrimitiveType
+        )
     }
 
     /** True when the vendor framework classes resolved in this process. */
@@ -143,6 +154,39 @@ object EinkCompat {
         if (saved == PrefsManager.NO_SAVED_FRONTLIGHT) return
         setFrontlight(saved)
         PrefsManager.setSavedFrontlight(context, PrefsManager.NO_SAVED_FRONTLIGHT)
+    }
+
+    /**
+     * Ask the vendor display-policy service to apply [level] as this package's
+     * brightness whenever it is the top app.
+     *
+     * The server stores it as `app_brightness_level` in its policy table and, on
+     * top-app change, feeds it to `XrzEinkManagerInternal.setScreenBrightnessLevel`
+     * — i.e. into `vendor.xrz.global_brightness_level`.
+     *
+     * **Measured on the HiBreak: the whole chain works and changes nothing.** A
+     * probe with level 100 returned true, `dumpsys xrz_display_policy_service`
+     * showed `appBrightnessLevel=100`, and the property did read 100 while our
+     * activity was on top — while `/sys/class/leds/lcd-backlight` went 0 → 240 → 1
+     * exactly as it does without the call. The xrz brightness level is inert on
+     * this model; Android's own brightness path owns the frontlight. Kept because
+     * other Bigme models may wire it up, but it is no use against the lock flash.
+     * No caller in this app.
+     */
+    fun setPackageBrightness(context: Context, level: Int): Boolean = try {
+        val cls = managerClass
+        val getter = getDisplayPolicyManager
+        val setter = setPackageBrightnessMethod
+        if (cls == null || getter == null || setter == null) false else {
+            val manager = cls.getConstructor(Context::class.java).newInstance(context)
+            val policy = getter.invoke(manager)
+            val ok = setter.invoke(policy, context.packageName, level) as? Boolean ?: false
+            Log.d(TAG, "setBrightnessLevelForPackage(${context.packageName}, $level) -> $ok")
+            ok
+        }
+    } catch (e: Throwable) {
+        Log.w(TAG, "setBrightnessLevelForPackage($level) failed: ${e.message}")
+        false
     }
 
     // ════════ Panel refresh ════════
