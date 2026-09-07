@@ -1,8 +1,10 @@
 package com.eink.screensaver
 
 import android.content.Context
+import android.os.Build
 import android.util.Log
 import android.view.Window
+import org.lsposed.hiddenapibypass.HiddenApiBypass
 import java.lang.reflect.Method
 
 /**
@@ -26,10 +28,16 @@ import java.lang.reflect.Method
  *    so the write is very likely refused for a third-party app — see
  *    [setFrontlight], which verifies by reading the value back.
  *
- * Everything here is also subject to Android 14 hidden-API enforcement, which
- * `adb shell` / `app_process` probes are exempt from. Only a run inside the app
- * process proves a call works, so every entry point is guarded and every caller
- * keeps its portable path.
+ * All of it sits behind Android's hidden-API restriction: measured on the
+ * device, `Class.forName` resolves the xrz classes but every `getMethod` throws
+ * `NoSuchMethodException`. (Write-ups that "prove" these calls with an
+ * `app_process` probe prove nothing — shell UID is exempt from the restriction,
+ * an app is not.) [liftHiddenApiRestriction] clears it for our own process at
+ * class-init time, which is what lets this ship to other users instead of
+ * asking each of them to set `hidden_api_policy` over adb.
+ *
+ * Every entry point is still guarded, and every caller keeps its portable path:
+ * the bypass is undocumented territory stacked on undocumented territory.
  */
 object EinkCompat {
 
@@ -49,6 +57,10 @@ object EinkCompat {
     const val MODE_NORMAL = 178
     const val MODE_FAST = 179
     const val MODE_REGAL = 180
+
+    init {
+        liftHiddenApiRestriction()
+    }
 
     private val managerClass: Class<*>? by lazy { loadClass(CLASS_MANAGER) }
     private val internalClass: Class<*>? by lazy { loadClass(CLASS_INTERNAL) }
@@ -167,6 +179,25 @@ object EinkCompat {
     }
 
     // ════════ Reflection plumbing ════════
+
+    /**
+     * Exempt the two signature prefixes we reflect on from the hidden-API
+     * restriction, for this process only. Runs once at class init, before any
+     * lookup — an exemption added after a failed lookup would not help, since
+     * the [Method] handles are cached in the lazies above.
+     *
+     * Deliberately narrow: exempting `"L"` would open the whole non-SDK surface
+     * of the framework to us, and we want exactly two things out of it.
+     */
+    private fun liftHiddenApiRestriction() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) return  // no restriction before 28
+        try {
+            HiddenApiBypass.addHiddenApiExemptions("Lxrz/framework/", "Landroid/view/Window;")
+        } catch (e: Throwable) {
+            // Leaves the vendor path unreachable; every caller falls back.
+            Log.w(TAG, "hidden-API exemption failed: ${e.message}")
+        }
+    }
 
     /** The xrz classes ship inside framework.jar, which is on BOOTCLASSPATH. */
     private fun loadClass(name: String): Class<*>? = try {

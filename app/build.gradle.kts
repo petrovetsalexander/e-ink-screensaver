@@ -59,4 +59,7 @@ dependencies {
     // Used directly by settings/ModuleSettingsActivity (drag-to-reorder list);
     // declared explicitly rather than relying on Material's transitive copy.
     implementation(libs.androidx.recyclerview)
+    // Used only by EinkCompat, to reach the vendor xrz framework without
+    // requiring every user to set hidden_api_policy over adb.
+    implementation(libs.hiddenapibypass)
 }
