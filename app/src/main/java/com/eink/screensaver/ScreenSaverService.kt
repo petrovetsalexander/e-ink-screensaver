@@ -34,6 +34,58 @@ class ScreenSaverService : Service() {
         const val LOCKSCREEN_NOTIFICATION_ID = 1002
         const val ACTION_STOP = "com.eink.screensaver.ACTION_STOP"
 
+        /**
+         * Wake lock tag that suppresses the frontlight on Bigme's xrz firmware.
+         *
+         * Not a name — a magic string. The vendor patched
+         * `PowerManagerService.updateGlobalWakefulnessLocked` with, in effect:
+         *
+         *     mIsWakeUpOnly = (reason == WAKE_REASON_APPLICATION
+         *                      && "com.xrz.screensaver".equals(details))
+         *
+         * and `DisplayPowerController` keeps the display at `state=1` while that
+         * flag is set: the panel takes its update, the backlight is never
+         * written. For a wake caused by an ACQUIRE_CAUSES_WAKEUP wake lock the
+         * "details" string is the wake lock's own tag, so this exact tag buys
+         * the stock screensaver's flash-free wake. Read out of
+         * /system/framework/services.jar with dexdump.
+         *
+         * **The flag stays set for as long as the device is awake**, and in that
+         * state the panel never properly powers on and the touchscreen ignores
+         * input. So the tag may only ever be used when we can put the device
+         * straight back to sleep — see [canUseVendorWake] and [scheduleSelfSleep].
+         * An earlier attempt without that made the phone very hard to unlock.
+         */
+        private const val WAKE_TAG_NO_BACKLIGHT = "com.xrz.screensaver"
+
+        /** How long after our own sleep an incoming SCREEN_OFF is still ours. */
+        private const val SELF_SLEEP_GRACE_MS = 4_000L
+
+        /** Time given to the panel to take the drawing before we sleep again. */
+        private const val DRAW_SETTLE_MS = 900L
+
+        /** Floor on how often the vendor wake path may run. */
+        private const val MIN_VENDOR_WAKE_INTERVAL_MS = 5_000L
+
+        /** Circuit breaker: more than this many vendor wakes in the window below
+         *  means something is looping, and the path is dropped for the session. */
+        private const val BREAKER_MAX_WAKES = 6
+        private const val BREAKER_WINDOW_MS = 60_000L
+
+        /**
+         * Set when the vendor wake path has misbehaved. Sticky for the life of
+         * the process: whatever went wrong, the fallback is a usable phone.
+         * Read by [LockScreenActivity] too, which must know whether the panel
+         * was already woken for it.
+         */
+        @Volatile
+        var vendorWakeDisabled = false
+            private set
+
+        /** True when a tagged wake is safe: we can undo it. */
+        fun canUseVendorWake(): Boolean =
+            EinkCompat.isSupported && !vendorWakeDisabled && SleepAccessibilityService.isConnected
+
         private const val LAUNCH_DELAY_MS = 200L
         private const val WAKELOCK_TIMEOUT_MS = 5_000L
         private const val ALARM_WAKELOCK_TIMEOUT_MS = 3_000L
@@ -54,6 +106,13 @@ class ScreenSaverService : Service() {
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var fetchWakeLock: PowerManager.WakeLock? = null
+
+    // ── Interlock for the vendor wake path ──
+    /** SCREEN_OFF arriving before this is the one we caused ourselves. */
+    private var selfSleepUntilMs = 0L
+    private var lastVendorWakeMs = 0L
+    private var breakerWindowStartMs = 0L
+    private var breakerWakeCount = 0
 
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -147,6 +206,15 @@ class ScreenSaverService : Service() {
 
     @SuppressLint("WakelockTimeout")
     private fun onScreenOff() {
+        // The latch. When we put the device to sleep ourselves the system hands
+        // us the resulting SCREEN_OFF like any other, and answering it with
+        // another wake is an endless loop — that is exactly what made the phone
+        // unusable the first time this was tried.
+        if (SystemClock.elapsedRealtime() < selfSleepUntilMs) {
+            Log.d(TAG, "SCREEN_OFF is our own sleep → ignoring")
+            return
+        }
+
         // Before the isActive guard: the screen goes off on every cycle, whether or
         // not the activity survived the last one. Largely vestigial on the HiBreak —
         // the system zeroes the xrz level before this broadcast reaches us, so the
@@ -154,22 +222,13 @@ class ScreenSaverService : Service() {
         // up.
         EinkCompat.dimFrontlight(this)
 
+        val vendorWake = acquireScreenWakeLock()
+
         if (LockScreenActivity.isActive) {
             Log.d(TAG, "LockScreenActivity already active, skipping launch")
+            if (vendorWake) scheduleSelfSleep()
             return
         }
-
-        // CPU-only wake lock: it keeps this service alive long enough to launch the
-        // activity and let it draw, but deliberately does NOT touch the display.
-        // The activity's own setTurnScreenOn(true) wakes the display instead, with
-        // brightness 0 already set on its window.
-        releaseWakeLock()
-        wakeLock = powerManager.newWakeLock(
-            PowerManager.PARTIAL_WAKE_LOCK,
-            "EinkScreensaver:ScreenOn"
-        )
-        wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
-        Log.d(TAG, "CPU WakeLock acquired; activity turns the screen on")
 
         val intent = Intent(this, LockScreenActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
@@ -183,12 +242,103 @@ class ScreenSaverService : Service() {
             startActivity(intent)
         }, LAUNCH_DELAY_MS)
 
+        if (vendorWake) scheduleSelfSleep()
+
         scheduleClockAlarm()
         triggerDataFetchIfStale()
     }
 
     fun cancelLockscreenNotification() {
         notificationManager.cancel(LOCKSCREEN_NOTIFICATION_ID)
+    }
+
+    // ════════ Vendor wake path + its interlocks ════════
+
+    /**
+     * Take the wake lock that will turn the panel on, and report whether it was
+     * the vendor one. The tagged wake is only taken when it can be undone and
+     * when neither the rate limit nor the circuit breaker objects; otherwise
+     * this is the old CPU-only lock and the activity wakes the display itself.
+     */
+    @SuppressLint("WakelockTimeout")
+    private fun acquireScreenWakeLock(): Boolean {
+        releaseWakeLock()
+        val useVendor = canUseVendorWake() && rateLimitAllowsVendorWake()
+        wakeLock = if (useVendor) {
+            @Suppress("DEPRECATION")
+            powerManager.newWakeLock(
+                PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+                WAKE_TAG_NO_BACKLIGHT
+            )
+        } else {
+            // CPU-only: keeps this service alive long enough to launch the activity
+            // and let it draw, but deliberately does NOT touch the display. The
+            // activity's own setTurnScreenOn(true) wakes the display instead.
+            powerManager.newWakeLock(
+                PowerManager.PARTIAL_WAKE_LOCK,
+                "EinkScreensaver:ScreenOn"
+            )
+        }
+        wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
+        Log.d(TAG, "WakeLock acquired (${if (useVendor) "vendor, no-backlight tag" else "CPU only"})")
+        return useVendor
+    }
+
+    /**
+     * Floor on how often the vendor path may fire, plus a breaker that drops it
+     * for good if it fires implausibly often. Neither should ever trigger in
+     * normal use; they exist so that a bug here degrades into the old behaviour
+     * rather than into a phone that will not unlock.
+     */
+    private fun rateLimitAllowsVendorWake(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastVendorWakeMs < MIN_VENDOR_WAKE_INTERVAL_MS) {
+            Log.d(TAG, "vendor wake rate-limited")
+            return false
+        }
+        if (now - breakerWindowStartMs > BREAKER_WINDOW_MS) {
+            breakerWindowStartMs = now
+            breakerWakeCount = 0
+        }
+        breakerWakeCount++
+        if (breakerWakeCount > BREAKER_MAX_WAKES) {
+            Log.w(TAG, "$breakerWakeCount vendor wakes in a minute → disabling the vendor path")
+            vendorWakeDisabled = true
+            return false
+        }
+        lastVendorWakeMs = now
+        return true
+    }
+
+    /**
+     * Put the device back to sleep once the panel has taken the drawing. This is
+     * what clears the vendor's wake-up-only flag; without it the panel stays
+     * half-awake and the touchscreen ignores input.
+     */
+    private fun scheduleSelfSleep() {
+        handler.postDelayed({
+            // The user may have woken the phone in the meantime — never sleep on them.
+            if (!LockScreenActivity.isActive || !keyguardManager.isDeviceLocked) {
+                Log.d(TAG, "self-sleep skipped, the user is here")
+                return@postDelayed
+            }
+            selfSleepUntilMs = SystemClock.elapsedRealtime() + SELF_SLEEP_GRACE_MS
+            releaseWakeLock()
+            if (!SleepAccessibilityService.sleepNow()) {
+                Log.w(TAG, "could not sleep → disabling the vendor path")
+                vendorWakeDisabled = true
+                selfSleepUntilMs = 0L
+                return@postDelayed
+            }
+            // Trust nothing: confirm the device actually went down, or stop using
+            // a wake we cannot undo.
+            handler.postDelayed({
+                if (powerManager.isInteractive) {
+                    Log.w(TAG, "still awake after the lock action → disabling the vendor path")
+                    vendorWakeDisabled = true
+                }
+            }, 1_500L)
+        }, DRAW_SETTLE_MS)
     }
 
     // ════════ WakeLock ════════
@@ -254,12 +404,14 @@ class ScreenSaverService : Service() {
         Log.d(TAG, "Clock alarm cancelled")
     }
 
+    @SuppressLint("WakelockTimeout")
     private fun onClockAlarmFired() {
         releaseWakeLock()
+        val useVendor = canUseVendorWake() && rateLimitAllowsVendorWake()
         @Suppress("DEPRECATION")
         wakeLock = powerManager.newWakeLock(
             PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
-            "EinkScreensaver:AlarmUpdate"
+            if (useVendor) WAKE_TAG_NO_BACKLIGHT else "EinkScreensaver:AlarmUpdate"
         )
         wakeLock?.acquire(ALARM_WAKELOCK_TIMEOUT_MS)
 
@@ -268,6 +420,11 @@ class ScreenSaverService : Service() {
             Intent(LockScreenActivity.ACTION_UPDATE_DISPLAY)
                 .setPackage(packageName)
         )
+
+        // This path matters most for the flash: it fires every update interval
+        // for as long as the device stays locked.
+        if (useVendor) scheduleSelfSleep()
+
         scheduleClockAlarm()
     }
 

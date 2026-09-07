@@ -20,6 +20,11 @@
     <string name="fullscreen_notifications_label">Fullscreen notifications: %s</string>
     <string name="grant_notifications">Grant notifications</string>
     <string name="grant_fullscreen">Grant fullscreen notifications</string>
+    <string name="accessibility_service_label">E-Ink Screensaver: return to sleep</string>
+    <string name="accessibility_service_description">Lets the screensaver put the display back to sleep after it redraws. Without it the panel flashes its frontlight every time the screen locks. Nothing on screen is read.</string>
+    <string name="a11y_label">Return to sleep (optional): %s</string>
+    <string name="grant_a11y">Enable in Accessibility</string>
+    <string name="a11y_hint">Without this the frontlight flashes for a moment each time the screen locks.</string>
     <string name="permissions_granted">permissions granted</string>
     <string name="open_settings_hint">Open Settings → Apps → E-Ink Screensaver → Notifications</string>
 

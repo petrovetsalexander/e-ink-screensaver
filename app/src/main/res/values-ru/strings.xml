@@ -20,6 +20,11 @@
     <string name="fullscreen_notifications_label">Полноэкранные уведомления: %s</string>
     <string name="grant_notifications">Разрешить уведомления</string>
     <string name="grant_fullscreen">Разрешить полноэкранные уведомления</string>
+    <string name="accessibility_service_label">E-Ink Screensaver: возврат в сон</string>
+    <string name="accessibility_service_description">Позволяет скринсейверу усыплять экран после перерисовки. Без этого при каждой блокировке на мгновение вспыхивает подсветка. Содержимое экрана не читается.</string>
+    <string name="a11y_label">Возврат в сон (необязательно): %s</string>
+    <string name="grant_a11y">Включить в спец. возможностях</string>
+    <string name="a11y_hint">Без этого при каждой блокировке экрана подсветка на мгновение вспыхивает.</string>
     <string name="permissions_granted">разрешения предоставлены</string>
     <string name="open_settings_hint">Откройте Настройки → Приложения → E-Ink Скринсейвер → Уведомления</string>
 

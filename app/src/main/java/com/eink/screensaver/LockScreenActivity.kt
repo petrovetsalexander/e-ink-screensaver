@@ -146,7 +146,15 @@ class LockScreenActivity : AppCompatActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
-            setTurnScreenOn(true)
+            // setTurnScreenOn issues its own wake, carrying WindowManager's details
+            // string rather than the service's — which clears the vendor's
+            // wake-up-only flag and brings the frontlight straight back up. When
+            // the service took the tagged wake lock the panel is already on, so
+            // asking again is both redundant and the thing that reintroduces the
+            // flash. Without that path we still need it.
+            if (!ScreenSaverService.canUseVendorWake()) {
+                setTurnScreenOn(true)
+            }
         } else {
             @Suppress("DEPRECATION")
             window.addFlags(
