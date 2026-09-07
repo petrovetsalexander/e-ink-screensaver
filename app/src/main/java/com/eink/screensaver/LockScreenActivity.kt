@@ -136,10 +136,13 @@ class LockScreenActivity : AppCompatActivity() {
 
         // Set brightness to 0 FIRST, before turning screen on.
         // This minimizes frontlight flash on e-ink — the window's brightness attribute
-        // is applied as the screen wakes.
+        // is applied as the screen wakes. On xrz firmware the service has already
+        // dropped the hardware frontlight in onScreenOff(), so this is the second
+        // line of defence rather than the only one.
         window.attributes = window.attributes.apply {
             screenBrightness = 0.0f
         }
+        EinkCompat.dimFrontlight(this)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
             setShowWhenLocked(true)
@@ -193,6 +196,11 @@ class LockScreenActivity : AppCompatActivity() {
         bookAnnotationText = findViewById(R.id.bookAnnotationText)
 
         registerReceivers()
+
+        // Ask the panel for a full flashing waveform on every update of this window.
+        // No-op off xrz firmware, where the black→white flash in forceFullEinkRefresh()
+        // remains the only way to get one.
+        EinkCompat.setWindowRefreshMode(this, window, EinkCompat.MODE_GC16)
 
         // Force full e-ink refresh: briefly show black screen, then draw content.
         // This forces every pixel to transition (full GC16 refresh), clearing ghosting.
@@ -262,6 +270,9 @@ class LockScreenActivity : AppCompatActivity() {
 
     private fun cancelNotificationAndFinish() {
         stopUnlockPolling()
+        // The poll is the reliable unlock signal here — USER_PRESENT proved flaky —
+        // so restore the frontlight from this path too, not just from the service.
+        EinkCompat.restoreFrontlight(this)
         try {
             val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
             nm.cancel(ScreenSaverService.LOCKSCREEN_NOTIFICATION_ID)
@@ -292,10 +303,20 @@ class LockScreenActivity : AppCompatActivity() {
     // ════════ E-ink full refresh ════════
 
     private fun forceFullEinkRefresh() {
-        // Flash the root view black to force a full pixel transition on the e-ink panel.
-        // This is the universal way to trigger a full GC16 refresh on any e-ink device
-        // without needing vendor-specific APIs.
         val root = window.decorView
+
+        if (EinkCompat.isSupported) {
+            // Vendor path: draw the content, then ask the HAL for one clearing
+            // waveform pass. Saves the two extra full frames and the 100 ms of
+            // wake lock the flash below costs on every launch.
+            root.setBackgroundColor(0xFFFFFFFF.toInt())
+            updateDisplay()
+            root.post { EinkCompat.forceGlobalRefresh(EinkCompat.MODE_CLEAN) }
+            return
+        }
+
+        // Portable path: flash the root view black to force a full pixel transition
+        // on the e-ink panel. Works on any e-ink device without vendor APIs.
         root.setBackgroundColor(0xFF000000.toInt())
         root.invalidate()
 

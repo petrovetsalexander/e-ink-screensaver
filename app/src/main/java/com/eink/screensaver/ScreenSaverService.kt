@@ -71,6 +71,7 @@ class ScreenSaverService : Service() {
                     cancelDataFetchAlarm()
                     cancelLockscreenNotification()
                     releaseWakeLock()
+                    EinkCompat.restoreFrontlight(this@ScreenSaverService)
                 }
             }
         }
@@ -89,6 +90,10 @@ class ScreenSaverService : Service() {
         startForeground(NOTIFICATION_ID, buildPersistentNotification())
         registerScreenReceiver()
 
+        // If the process died while the frontlight was dimmed, the panel light is
+        // still off. Put it back before anything else.
+        EinkCompat.restoreFrontlight(this)
+
         if (!powerManager.isInteractive) {
             Log.d(TAG, "Service started with screen OFF → trigger lockscreen")
             onScreenOff()
@@ -105,6 +110,7 @@ class ScreenSaverService : Service() {
                 cancelLockscreenNotification()
                 sendBroadcast(Intent(LockScreenActivity.ACTION_FINISH).setPackage(packageName))
                 releaseWakeLock()
+                EinkCompat.restoreFrontlight(this)
                 stopSelf()
                 return START_NOT_STICKY
             }
@@ -130,6 +136,7 @@ class ScreenSaverService : Service() {
         releaseWakeLock()
         releaseFetchWakeLock()
         unregisterScreenReceiver()
+        EinkCompat.restoreFrontlight(this)
         Log.d(TAG, "Service destroyed")
         super.onDestroy()
     }
@@ -145,15 +152,18 @@ class ScreenSaverService : Service() {
             return
         }
 
+        // Kill the frontlight at the hardware level first, while we still own the
+        // moment. window.screenBrightness=0.0f only takes effect once the activity's
+        // window is added, so between setTurnScreenOn() and LockScreenActivity.onCreate()
+        // the system briefly lights the panel at its own dim level. On xrz firmware
+        // this closes that window entirely; elsewhere it is a no-op and the window
+        // attribute remains the only defence. Restored on unlock.
+        EinkCompat.dimFrontlight(this)
+
         // CPU-only wake lock: it keeps this service alive long enough to launch the
         // activity and let it draw, but deliberately does NOT touch the display.
-        //
-        // Waking the screen from here (SCREEN_DIM_WAKE_LOCK|ACQUIRE_CAUSES_WAKEUP)
-        // turned the frontlight on at the system dim level, because at that moment
-        // no window of ours exists yet to override brightness — LockScreenActivity
-        // only applies screenBrightness=0.0f once it reaches onCreate. That was the
-        // visible flash on lock. The activity's own setTurnScreenOn(true) wakes the
-        // display instead, with brightness 0 already set on its window.
+        // The activity's own setTurnScreenOn(true) wakes the display instead, with
+        // brightness 0 already set on its window.
         releaseWakeLock()
         wakeLock = powerManager.newWakeLock(
             PowerManager.PARTIAL_WAKE_LOCK,
