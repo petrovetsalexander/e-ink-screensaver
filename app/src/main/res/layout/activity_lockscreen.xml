@@ -26,8 +26,7 @@
 
         <!-- Header row: clock on the left, weather summary on the right.
              This whole row is the "clock" module slot in reorderModules(); the
-             three-hour forecast strip below stays the "weather" slot, so both
-             remain draggable. -->
+             weather summary, forecast strip included, lives inside it. -->
         <LinearLayout
             android:id="@+id/headerRow"
             android:layout_width="match_parent"
@@ -48,7 +47,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="00:00"
-                    android:textSize="72sp"
+                    android:textSize="60sp"
                     android:textColor="#000000"
                     android:fontFamily="sans-serif-light"
                     android:letterSpacing="0.05"
@@ -93,20 +92,18 @@
                     android:gravity="end"
                     android:fontFamily="sans-serif"
                     android:layout_marginTop="2dp" />
+
+                <!-- Forecast slots live in the corner too, built in
+                     buildForecastSlot() at a deliberately small size. -->
+                <LinearLayout
+                    android:id="@+id/weatherForecastRow"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:orientation="horizontal"
+                    android:baselineAligned="false"
+                    android:layout_marginTop="4dp" />
             </LinearLayout>
         </LinearLayout>
-
-        <!-- Weather section -->
-        <LinearLayout
-            android:id="@+id/weatherSection"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:baselineAligned="false"
-            android:layout_marginBottom="12dp"
-            android:visibility="gone" />
-        <!-- Three-hour forecast slots are built in buildForecastSlot(): each is
-             hour / icon + optional precipitation column / temperature. -->
 
 
         <!-- News section -->

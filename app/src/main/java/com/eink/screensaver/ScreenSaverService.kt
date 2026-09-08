@@ -496,7 +496,8 @@ class ScreenSaverService : Service() {
                     if (now - PrefsManager.getWeatherCacheTimeMs(ctx) > interval) {
                         val data = WeatherFetcher.fetch(
                             PrefsManager.getWeatherCity(ctx),
-                            PrefsManager.getWeatherApiKey(ctx)
+                            PrefsManager.getWeatherStepHours(ctx),
+                            PrefsManager.getWeatherSlots(ctx)
                         )
                         if (data != null) {
                             PrefsManager.setWeatherCache(ctx, data.toJson())
