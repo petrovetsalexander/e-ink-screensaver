@@ -116,6 +116,7 @@ class LockScreenActivity : AppCompatActivity() {
                     Log.d(TAG, "SCREEN_ON → start polling, update display")
                     updateDisplay()
                     startUnlockPolling()
+                    promptForUnlockIfUserWoke()
                 }
                 ScreenSaverService.ACTION_DATA_UPDATED -> {
                     Log.d(TAG, "DATA_UPDATED → refresh display")
@@ -265,6 +266,34 @@ class LockScreenActivity : AppCompatActivity() {
 
     @Deprecated("Deprecated in Java")
     override fun onBackPressed() {}
+
+    /**
+     * This activity sits over the keyguard with setShowWhenLocked, so pressing
+     * power used to light the panel on the dashboard and nothing else — no
+     * pattern, no fingerprint hint. Asking the keyguard to dismiss brings its
+     * own prompt up, and it takes the fingerprint as readily as the pattern.
+     *
+     * Only for wakes the user caused: the service marks its own redraw wakes,
+     * which arrive as an identical SCREEN_ON every update interval and must not
+     * put a prompt in front of nobody.
+     */
+    private fun promptForUnlockIfUserWoke() {
+        if (ScreenSaverService.isSelfWake()) {
+            Log.d(TAG, "SCREEN_ON came from our own redraw → no prompt")
+            return
+        }
+        // isKeyguardLocked, not isDeviceLocked: the latter is false whenever the
+        // keyguard is not secure or the device is in a trusted state, and the
+        // prompt is exactly what is wanted in those cases too. (The unlock poll
+        // keeps using isDeviceLocked — it answers a different question.)
+        if (!keyguardManager.isKeyguardLocked) return
+        try {
+            keyguardManager.requestDismissKeyguard(this, null)
+            Log.d(TAG, "asked the keyguard for its unlock prompt")
+        } catch (e: Throwable) {
+            Log.w(TAG, "requestDismissKeyguard failed: ${e.message}")
+        }
+    }
 
     // ════════ Unlock polling ════════
 
