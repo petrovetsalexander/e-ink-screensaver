@@ -86,6 +86,23 @@ class ScreenSaverService : Service() {
         fun canUseVendorWake(): Boolean =
             EinkCompat.isSupported && !vendorWakeDisabled && SleepAccessibilityService.isConnected
 
+        /**
+         * Set whenever the service itself wakes the panel to redraw. Lets
+         * `LockScreenActivity` tell a redraw apart from the user reaching for
+         * the phone — SCREEN_ON looks identical in both cases, and only the
+         * second one should be answered with the keyguard prompt.
+         */
+        @Volatile
+        private var selfWakeUntilMs = 0L
+
+        private const val SELF_WAKE_WINDOW_MS = 3_000L
+
+        fun markSelfWake() {
+            selfWakeUntilMs = SystemClock.elapsedRealtime() + SELF_WAKE_WINDOW_MS
+        }
+
+        fun isSelfWake(): Boolean = SystemClock.elapsedRealtime() < selfWakeUntilMs
+
         private const val LAUNCH_DELAY_MS = 200L
         private const val WAKELOCK_TIMEOUT_MS = 5_000L
         private const val ALARM_WAKELOCK_TIMEOUT_MS = 3_000L
@@ -280,6 +297,7 @@ class ScreenSaverService : Service() {
             )
         }
         wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
+        markSelfWake()
         Log.d(TAG, "WakeLock acquired (${if (useVendor) "vendor, no-backlight tag" else "CPU only"})")
         return useVendor
     }
@@ -414,6 +432,7 @@ class ScreenSaverService : Service() {
             if (useVendor) WAKE_TAG_NO_BACKLIGHT else "EinkScreensaver:AlarmUpdate"
         )
         wakeLock?.acquire(ALARM_WAKELOCK_TIMEOUT_MS)
+        markSelfWake()
 
         // Send broadcast to active lockscreen
         sendBroadcast(
