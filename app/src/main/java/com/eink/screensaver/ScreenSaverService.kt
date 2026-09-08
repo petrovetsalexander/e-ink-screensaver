@@ -29,9 +29,7 @@ class ScreenSaverService : Service() {
     companion object {
         const val TAG = "ScreenSaverSvc"
         const val CHANNEL_ID = "eink_screensaver_channel"
-        const val CHANNEL_LOCKSCREEN_ID = "eink_lockscreen_channel"
         const val NOTIFICATION_ID = 1001
-        const val LOCKSCREEN_NOTIFICATION_ID = 1002
         const val ACTION_STOP = "com.eink.screensaver.ACTION_STOP"
 
         /**
@@ -145,7 +143,6 @@ class ScreenSaverService : Service() {
                     Log.d(TAG, "══ USER_PRESENT ══")
                     cancelClockAlarm()
                     cancelDataFetchAlarm()
-                    cancelLockscreenNotification()
                     releaseWakeLock()
                     EinkCompat.restoreFrontlight(this@ScreenSaverService)
                 }
@@ -183,7 +180,6 @@ class ScreenSaverService : Service() {
             ACTION_STOP -> {
                 cancelClockAlarm()
                 cancelDataFetchAlarm()
-                cancelLockscreenNotification()
                 sendBroadcast(Intent(LockScreenActivity.ACTION_FINISH).setPackage(packageName))
                 releaseWakeLock()
                 EinkCompat.restoreFrontlight(this)
@@ -208,7 +204,6 @@ class ScreenSaverService : Service() {
         handler.removeCallbacksAndMessages(null)
         cancelClockAlarm()
         cancelDataFetchAlarm()
-        cancelLockscreenNotification()
         releaseWakeLock()
         releaseFetchWakeLock()
         unregisterScreenReceiver()
@@ -264,11 +259,6 @@ class ScreenSaverService : Service() {
         scheduleClockAlarm()
         triggerDataFetchIfStale()
     }
-
-    fun cancelLockscreenNotification() {
-        notificationManager.cancel(LOCKSCREEN_NOTIFICATION_ID)
-    }
-
     // ════════ Vendor wake path + its interlocks ════════
 
     /**
@@ -594,18 +584,14 @@ class ScreenSaverService : Service() {
             setShowBadge(false)
         }
 
-        val lockChannel = NotificationChannel(
-            CHANNEL_LOCKSCREEN_ID, getString(R.string.channel_lockscreen), NotificationManager.IMPORTANCE_HIGH
-        ).apply {
-            description = getString(R.string.channel_lockscreen_desc)
-            setShowBadge(false)
-            setSound(null, null)
-            enableVibration(false)
-            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
-        }
-
         notificationManager.createNotificationChannel(mainChannel)
-        notificationManager.createNotificationChannel(lockChannel)
+
+        // Deleting the code that created a channel does not remove the channel:
+        // it lives in the system until the app is uninstalled, so an upgrade
+        // would keep showing an empty "Lock screen clock" entry in the app's
+        // notification settings. This retires the one the fullScreenIntent
+        // design left behind, and is a no-op on a fresh install.
+        notificationManager.deleteNotificationChannel("eink_lockscreen_channel")
     }
 
     private fun buildPersistentNotification(): Notification {

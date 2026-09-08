@@ -133,12 +133,9 @@ class SettingsActivity : AppCompatActivity() {
         val hasNotif = hasNotificationPermission()
         val hasA11y = SleepAccessibilityService.isEnabledInSettings(this)
         // Notifications are the only hard requirement: a foreground service
-        // cannot run without one. USE_FULL_SCREEN_INTENT is not asked for at all
-        // any more \u2014 this branch posts no full-screen intents, so gating the
-        // enable button on it made new users grant something for nothing. The
-        // accessibility service only suppresses the frontlight flash, so it
-        // gates nothing either, but the section stays up while it is off,
-        // otherwise the offer would be undiscoverable.
+        // cannot run without one. The accessibility service only suppresses the
+        // frontlight flash, so it gates nothing, but the section stays up while
+        // it is off \u2014 otherwise the offer would be undiscoverable.
         if (hasNotif && hasA11y) {
             permissionSection.visibility = View.GONE
         } else {

@@ -45,7 +45,7 @@ Package: `com.eink.screensaver`. Dependencies are only `core-ktx`, `appcompat`, 
 5. Two `AlarmManager` alarms wake the service periodically (see below).
 6. Unlock is detected by polling `KeyguardManager.isDeviceLocked` every 1000 ms, and only while the screen is on (`SCREEN_ON`/`SCREEN_OFF` start/stop the poll). Broadcast-based detection proved unreliable. On unlock: short vibration, then finish.
 
-**This branch deliberately does not use `fullScreenIntent`** (see branch name `no_fullScreenIntent`). The service launches the activity from the background directly, relying on the wake lock. Residue of the old approach still exists and is intentionally kept: the `USE_FULL_SCREEN_INTENT` permission in the manifest, the `CHANNEL_LOCKSCREEN_ID` channel and the `LOCKSCREEN_NOTIFICATION_ID` cancel calls. Only the *posting* side is gone. The permission gate that used to sit in `SettingsActivity` has been removed — nothing here posts a full-screen intent, so blocking the enable button on it made new users grant something for nothing. `POST_NOTIFICATIONS` is now the only hard requirement, because a foreground service cannot run without one.
+**The app does not use `fullScreenIntent`** (hence the old branch name `no_fullScreenIntent`). The service launches the activity from the background directly, relying on the wake lock. Every trace of the earlier approach is gone — the permission, the second notification channel, the cancel calls and the settings gate — so `POST_NOTIFICATIONS` is the only hard requirement, and only because a foreground service cannot run without a notification.
 
 ### The two alarms
 
