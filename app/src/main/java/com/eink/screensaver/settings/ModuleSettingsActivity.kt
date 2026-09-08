@@ -83,9 +83,6 @@ class ModuleSettingsActivity : AppCompatActivity() {
         findViewById<Button>(R.id.btnClockSettings).setOnClickListener {
             startActivity(Intent(this, ClockSettingsActivity::class.java))
         }
-        findViewById<Button>(R.id.btnWeatherSettings).setOnClickListener {
-            startActivity(Intent(this, WeatherSettingsActivity::class.java))
-        }
         findViewById<Button>(R.id.btnNewsSettings).setOnClickListener {
             startActivity(Intent(this, NewsSettingsActivity::class.java))
         }
@@ -107,7 +104,6 @@ class ModuleSettingsActivity : AppCompatActivity() {
 
     private fun isModuleEnabled(key: String): Boolean = when (key) {
         "clock" -> PrefsManager.isBlockClockEnabled(this)
-        "weather" -> PrefsManager.isBlockWeatherEnabled(this)
         "news" -> PrefsManager.isBlockNewsEnabled(this)
         "notes" -> PrefsManager.isBlockNotesEnabled(this)
         "book" -> PrefsManager.isBlockBookEnabled(this)
@@ -117,7 +113,6 @@ class ModuleSettingsActivity : AppCompatActivity() {
     private fun setModuleEnabled(key: String, enabled: Boolean) {
         when (key) {
             "clock" -> PrefsManager.setBlockClockEnabled(this, enabled)
-            "weather" -> PrefsManager.setBlockWeatherEnabled(this, enabled)
             "news" -> PrefsManager.setBlockNewsEnabled(this, enabled)
             "notes" -> PrefsManager.setBlockNotesEnabled(this, enabled)
             "book" -> PrefsManager.setBlockBookEnabled(this, enabled)
@@ -126,7 +121,6 @@ class ModuleSettingsActivity : AppCompatActivity() {
 
     private fun moduleDisplayName(key: String): String = when (key) {
         "clock" -> getString(R.string.module_clock)
-        "weather" -> getString(R.string.module_weather)
         "news" -> getString(R.string.module_news)
         "notes" -> getString(R.string.module_notes)
         "book" -> getString(R.string.module_book)

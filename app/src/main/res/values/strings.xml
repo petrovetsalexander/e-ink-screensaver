@@ -40,8 +40,8 @@
 
     <!-- Lock screen modules -->
     <string name="modules_title">Lock screen modules</string>
-    <string name="module_clock">Clock</string>
-    <string name="module_weather">Weather</string>
+    <string name="module_clock">Clock and weather</string>
+    <string name="weather_enabled">Show weather</string>
     <string name="module_news">News</string>
     <string name="module_notes">Notes</string>
     <string name="module_book">Book</string>
@@ -51,7 +51,6 @@
     <string name="weather_title">Weather</string>
     <string name="weather_description">Open-Meteo — no API key needed, just the city</string>
     <string name="weather_city_hint">City (e.g. Moscow)</string>
-    <string name="weather_api_key_hint">API key</string>
     <string name="weather_interval_title">Weather update interval</string>
     <string name="weather_step_title">Forecast step</string>
     <string name="weather_step_value">%d h</string>
@@ -155,8 +154,7 @@
     <!-- Module settings -->
     <string name="module_settings_title">Module settings</string>
     <string name="font_size_label">Font size: %d sp</string>
-    <string name="clock_settings">Clock settings</string>
-    <string name="weather_settings">Weather settings</string>
+    <string name="clock_settings">Clock and weather settings</string>
     <string name="news_settings">News settings</string>
     <string name="notes_settings">Notes settings</string>
     <string name="book_settings">Book settings</string>

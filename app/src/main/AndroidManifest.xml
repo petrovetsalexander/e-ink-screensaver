@@ -35,7 +35,6 @@
         <activity android:name="com.eink.screensaver.settings.SettingsActivity" android:exported="false" />
         <activity android:name="com.eink.screensaver.settings.ModuleSettingsActivity" android:exported="false" />
         <activity android:name="com.eink.screensaver.settings.ClockSettingsActivity" android:exported="false" />
-        <activity android:name="com.eink.screensaver.settings.WeatherSettingsActivity" android:exported="false" />
         <activity android:name="com.eink.screensaver.settings.NewsSettingsActivity" android:exported="false" />
         <activity android:name="com.eink.screensaver.settings.NotesSettingsActivity" android:exported="false" />
         <activity android:name="com.eink.screensaver.settings.BookSettingsActivity" android:exported="false" />

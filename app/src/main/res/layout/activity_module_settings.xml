@@ -82,15 +82,6 @@
                 style="@style/Widget.Material3.Button.OutlinedButton" />
 
             <Button
-                android:id="@+id/btnWeatherSettings"
-                android:layout_width="match_parent"
-                android:layout_height="48dp"
-                android:text="@string/weather_settings"
-                android:textSize="14sp"
-                android:layout_marginBottom="8dp"
-                style="@style/Widget.Material3.Button.OutlinedButton" />
-
-            <Button
                 android:id="@+id/btnNewsSettings"
                 android:layout_width="match_parent"
                 android:layout_height="48dp"
