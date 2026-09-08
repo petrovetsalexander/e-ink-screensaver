@@ -87,7 +87,7 @@ class LockScreenActivity : AppCompatActivity() {
             if (!keyguardManager.isDeviceLocked) {
                 Log.d(TAG, "POLL: device unlocked → vibrate + finish")
                 vibrateConfirmation()
-                cancelNotificationAndFinish()
+                finishOnUnlock()
                 return
             }
             handler.postDelayed(this, UNLOCK_POLL_INTERVAL_MS)
@@ -101,7 +101,7 @@ class LockScreenActivity : AppCompatActivity() {
                     Log.d(TAG, "USER_PRESENT broadcast → checking")
                     if (!keyguardManager.isDeviceLocked) {
                         vibrateConfirmation()
-                        cancelNotificationAndFinish()
+                        finishOnUnlock()
                     }
                 }
                 ACTION_FINISH -> {
@@ -237,7 +237,7 @@ class LockScreenActivity : AppCompatActivity() {
         if (!keyguardManager.isDeviceLocked) {
             Log.d(TAG, "onResume: device already unlocked → finish")
             vibrateConfirmation()
-            cancelNotificationAndFinish()
+            finishOnUnlock()
             return
         }
 
@@ -310,17 +310,11 @@ class LockScreenActivity : AppCompatActivity() {
 
     // ════════ Finish ════════
 
-    private fun cancelNotificationAndFinish() {
+    private fun finishOnUnlock() {
         stopUnlockPolling()
         // The poll is the reliable unlock signal here — USER_PRESENT proved flaky —
         // so restore the frontlight from this path too, not just from the service.
         EinkCompat.restoreFrontlight(this)
-        try {
-            val nm = getSystemService(NOTIFICATION_SERVICE) as android.app.NotificationManager
-            nm.cancel(ScreenSaverService.LOCKSCREEN_NOTIFICATION_ID)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed to cancel notification: ${e.message}")
-        }
         finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
