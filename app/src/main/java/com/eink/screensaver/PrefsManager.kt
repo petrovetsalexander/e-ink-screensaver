@@ -15,7 +15,6 @@ object PrefsManager {
 
     // Weather
     private const val KEY_WEATHER_CITY = "weather_city"
-    private const val KEY_WEATHER_API_KEY = "weather_api_key"
     private const val KEY_WEATHER_INTERVAL_MIN = "weather_interval_min"
     private const val KEY_WEATHER_STEP_HOURS = "weather_forecast_step_hours"
     private const val KEY_WEATHER_SLOTS = "weather_forecast_slots"
@@ -65,7 +64,7 @@ object PrefsManager {
     // Module order & clock position
     private const val KEY_MODULES_ORDER = "modules_order"
     private const val KEY_CLOCK_POSITION = "clock_position"
-    private const val DEFAULT_MODULES_ORDER = "clock,weather,news,notes,book"
+    private const val DEFAULT_MODULES_ORDER = "clock,news,notes,book"
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -117,13 +116,6 @@ object PrefsManager {
 
     fun setWeatherCity(context: Context, city: String) {
         prefs(context).edit().putString(KEY_WEATHER_CITY, city).apply()
-    }
-
-    fun getWeatherApiKey(context: Context): String =
-        prefs(context).getString(KEY_WEATHER_API_KEY, "") ?: ""
-
-    fun setWeatherApiKey(context: Context, key: String) {
-        prefs(context).edit().putString(KEY_WEATHER_API_KEY, key).apply()
     }
 
     fun getWeatherIntervalMin(context: Context): Int =
@@ -378,9 +370,16 @@ object PrefsManager {
 
     // ════════ Module order ════════
 
+    /**
+     * "weather" is dropped on read: it used to be a module of its own, but the
+     * weather now shares the header row with the clock and cannot be positioned
+     * separately, so it is part of the "clock" slot. Orders saved before that
+     * still list it, and without this it would show up in the reorder screen as
+     * a row with no meaning.
+     */
     fun getModulesOrder(context: Context): List<String> {
         val raw = prefs(context).getString(KEY_MODULES_ORDER, DEFAULT_MODULES_ORDER) ?: DEFAULT_MODULES_ORDER
-        return raw.split(",").filter { it.isNotBlank() }
+        return raw.split(",").filter { it.isNotBlank() && it != "weather" }
     }
 
     fun setModulesOrder(context: Context, order: List<String>) {

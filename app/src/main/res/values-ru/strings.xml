@@ -40,8 +40,8 @@
 
     <!-- Lock screen modules -->
     <string name="modules_title">Модули на экране блокировки</string>
-    <string name="module_clock">Часы</string>
-    <string name="module_weather">Погода</string>
+    <string name="module_clock">Часы и погода</string>
+    <string name="weather_enabled">Показывать погоду</string>
     <string name="module_news">Новости</string>
     <string name="module_notes">Заметки</string>
     <string name="module_book">Книга</string>
@@ -51,7 +51,6 @@
     <string name="weather_title">Погода</string>
     <string name="weather_description">Open-Meteo — ключ не нужен, достаточно города</string>
     <string name="weather_city_hint">Город (напр. Moscow)</string>
-    <string name="weather_api_key_hint">API ключ</string>
     <string name="weather_interval_title">Интервал обновления погоды</string>
     <string name="weather_step_title">Шаг прогноза</string>
     <string name="weather_step_value">%d ч</string>
@@ -155,8 +154,7 @@
     <!-- Module settings -->
     <string name="module_settings_title">Настройки модулей</string>
     <string name="font_size_label">Размер шрифта: %d sp</string>
-    <string name="clock_settings">Настройки часов</string>
-    <string name="weather_settings">Настройки погоды</string>
+    <string name="clock_settings">Настройки часов и погоды</string>
     <string name="news_settings">Настройки новостей</string>
     <string name="notes_settings">Настройки заметок</string>
     <string name="book_settings">Настройки книги</string>
