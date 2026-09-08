@@ -325,7 +325,7 @@ object PrefsManager {
     // ════════ Font sizes ════════
 
     fun getFontSizeClock(context: Context): Int =
-        prefs(context).getInt(KEY_FONT_SIZE_CLOCK, 56)
+        prefs(context).getInt(KEY_FONT_SIZE_CLOCK, 50)
 
     fun setFontSizeClock(context: Context, sp: Int) {
         prefs(context).edit().putInt(KEY_FONT_SIZE_CLOCK, sp).apply()

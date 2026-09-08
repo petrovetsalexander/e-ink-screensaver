@@ -55,8 +55,6 @@
     <string name="weather_slots_title">Иконок прогноза</string>
     <string name="weather_slots_value">%d</string>
     <string name="weather_slots_off">выкл</string>
-    <string name="save_weather">Сохранить погоду</string>
-    <string name="weather_saved">Погода сохранена</string>
 
     <!-- News -->
     <string name="news_title">Новости</string>
@@ -74,15 +72,11 @@
     <string name="news_shuffle">Перемешивать</string>
     <string name="news_shuffle_hint">Случайный выбор при каждой блокировке</string>
     <string name="news_shuffle_explanation">Когда активно, при каждой блокировке телефона из всех загруженных новостей случайным образом выбирается указанное количество для показа на экране. Количество показываемых новостей контролируется настройкой «Новостей на экране».</string>
-    <string name="save_news">Сохранить новости</string>
-    <string name="news_saved">Новости сохранены</string>
 
     <!-- Yandex Books (Bookmate) -->
     <string name="yandex_books_title">Яндекс Книги</string>
     <string name="yandex_books_description">Последняя книга из библиотеки</string>
     <string name="bookmate_user_id_hint">User ID (напр. b1234567890)</string>
-    <string name="save_yandex_books">Сохранить Яндекс Книги</string>
-    <string name="yandex_books_saved">Яндекс Книги сохранены</string>
 
     <!-- How it works -->
     <string name="how_it_works">Как это работает?</string>

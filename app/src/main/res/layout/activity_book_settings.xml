@@ -83,14 +83,5 @@
             android:progress="13"
             android:layout_marginBottom="24dp" />
 
-        <Button
-            android:id="@+id/btnSave"
-            android:layout_width="match_parent"
-            android:layout_height="44dp"
-            android:text="@string/save"
-            android:textSize="14sp"
-            android:layout_marginBottom="32dp"
-            style="@style/Widget.Material3.Button.OutlinedButton" />
-
     </LinearLayout>
 </ScrollView>

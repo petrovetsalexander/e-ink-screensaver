@@ -8,7 +8,6 @@ import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.SeekBar
 import android.widget.TextView
-import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import com.eink.screensaver.PrefsManager
@@ -16,14 +15,17 @@ import com.eink.screensaver.R
 
 class NewsSettingsActivity : AppCompatActivity() {
 
+    private lateinit var etRssUrl: EditText
+    private lateinit var etBodyTags: EditText
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_news_settings)
 
         findViewById<ImageButton>(R.id.btnBack).setOnClickListener { finish() }
 
-        val etRssUrl = findViewById<EditText>(R.id.etNewsRssUrl)
-        val etBodyTags = findViewById<EditText>(R.id.etBodyTags)
+        val etRssUrl = findViewById<EditText>(R.id.etNewsRssUrl).also { this.etRssUrl = it }
+        val etBodyTags = findViewById<EditText>(R.id.etBodyTags).also { this.etBodyTags = it }
         val intervalSeekBar = findViewById<SeekBar>(R.id.newsIntervalSeekBar)
         val intervalValue = findViewById<TextView>(R.id.newsIntervalValue)
         val downloadCountSeekBar = findViewById<SeekBar>(R.id.downloadCountSeekBar)
@@ -74,12 +76,14 @@ class NewsSettingsActivity : AppCompatActivity() {
 
         // Listeners
         cbOnlyHeader.setOnCheckedChangeListener { _, isChecked ->
+            PrefsManager.setNewsOnlyHeader(this, isChecked)
             updateBodyFontSizeVisibility(isChecked)
         }
 
         intervalSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 intervalValue.text = getString(R.string.interval_value_min, progress + 1)
+                if (fromUser) PrefsManager.setNewsIntervalMin(this@NewsSettingsActivity, progress + 1)
             }
             override fun onStartTrackingTouch(seekBar: SeekBar) {}
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
@@ -88,6 +92,7 @@ class NewsSettingsActivity : AppCompatActivity() {
         downloadCountSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 downloadCountLabel.text = getString(R.string.news_download_count_label, progress)
+                if (fromUser) PrefsManager.setNewsDownloadCount(this@NewsSettingsActivity, progress)
             }
             override fun onStartTrackingTouch(seekBar: SeekBar) {}
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
@@ -96,6 +101,7 @@ class NewsSettingsActivity : AppCompatActivity() {
         displayCountSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 displayCountLabel.text = getString(R.string.news_display_count_label, progress)
+                if (fromUser) PrefsManager.setNewsDisplayCount(this@NewsSettingsActivity, progress)
             }
             override fun onStartTrackingTouch(seekBar: SeekBar) {}
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
@@ -104,6 +110,7 @@ class NewsSettingsActivity : AppCompatActivity() {
         fontSizeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 fontSizeLabel.text = getString(R.string.font_size_label, progress)
+                if (fromUser) PrefsManager.setFontSizeNews(this@NewsSettingsActivity, progress)
             }
             override fun onStartTrackingTouch(seekBar: SeekBar) {}
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
@@ -112,6 +119,7 @@ class NewsSettingsActivity : AppCompatActivity() {
         bodyFontSizeSeekBar.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
                 bodyFontSizeLabel.text = getString(R.string.news_body_font_size_label, progress)
+                if (fromUser) PrefsManager.setFontSizeNewsBody(this@NewsSettingsActivity, progress)
             }
             override fun onStartTrackingTouch(seekBar: SeekBar) {}
             override fun onStopTrackingTouch(seekBar: SeekBar) {}
@@ -126,17 +134,18 @@ class NewsSettingsActivity : AppCompatActivity() {
                 .show()
         }
 
-        findViewById<Button>(R.id.btnSave).setOnClickListener {
-            PrefsManager.setNewsRssUrl(this, etRssUrl.text.toString().trim())
-            PrefsManager.setNewsBodyTags(this, etBodyTags.text.toString().trim())
-            PrefsManager.setNewsIntervalMin(this, intervalSeekBar.progress + 1)
-            PrefsManager.setNewsDownloadCount(this, downloadCountSeekBar.progress)
-            PrefsManager.setNewsDisplayCount(this, displayCountSeekBar.progress)
-            PrefsManager.setNewsOnlyHeader(this, cbOnlyHeader.isChecked)
-            PrefsManager.setNewsShuffle(this, cbShuffle.isChecked)
-            PrefsManager.setFontSizeNews(this, fontSizeSeekBar.progress)
-            PrefsManager.setFontSizeNewsBody(this, bodyFontSizeSeekBar.progress)
-            Toast.makeText(this, R.string.news_saved, Toast.LENGTH_SHORT).show()
+        cbShuffle.setOnCheckedChangeListener { _, isChecked ->
+            PrefsManager.setNewsShuffle(this, isChecked)
         }
+    }
+
+    /**
+     * The URL and the tag list are saved on the way out rather than on every
+     * keystroke: a half-typed feed address would otherwise be fetched.
+     */
+    override fun onPause() {
+        super.onPause()
+        PrefsManager.setNewsRssUrl(this, etRssUrl.text.toString().trim())
+        PrefsManager.setNewsBodyTags(this, etBodyTags.text.toString().trim())
     }
 }
