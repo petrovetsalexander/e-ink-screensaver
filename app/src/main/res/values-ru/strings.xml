@@ -49,10 +49,15 @@
 
     <!-- Weather -->
     <string name="weather_title">Погода</string>
-    <string name="weather_description">OpenWeatherMap (нужен бесплатный API ключ)</string>
+    <string name="weather_description">Open-Meteo — ключ не нужен, достаточно города</string>
     <string name="weather_city_hint">Город (напр. Moscow)</string>
     <string name="weather_api_key_hint">API ключ</string>
     <string name="weather_interval_title">Интервал обновления погоды</string>
+    <string name="weather_step_title">Шаг прогноза</string>
+    <string name="weather_step_value">%d ч</string>
+    <string name="weather_slots_title">Иконок прогноза</string>
+    <string name="weather_slots_value">%d</string>
+    <string name="weather_slots_off">выкл</string>
     <string name="save_weather">Сохранить погоду</string>
     <string name="weather_saved">Погода сохранена</string>
 

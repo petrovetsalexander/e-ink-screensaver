@@ -49,10 +49,15 @@
 
     <!-- Weather -->
     <string name="weather_title">Weather</string>
-    <string name="weather_description">OpenWeatherMap (free API key required)</string>
+    <string name="weather_description">Open-Meteo — no API key needed, just the city</string>
     <string name="weather_city_hint">City (e.g. Moscow)</string>
     <string name="weather_api_key_hint">API key</string>
     <string name="weather_interval_title">Weather update interval</string>
+    <string name="weather_step_title">Forecast step</string>
+    <string name="weather_step_value">%d h</string>
+    <string name="weather_slots_title">Forecast slots</string>
+    <string name="weather_slots_value">%d</string>
+    <string name="weather_slots_off">off</string>
     <string name="save_weather">Save weather</string>
     <string name="weather_saved">Weather saved</string>
 

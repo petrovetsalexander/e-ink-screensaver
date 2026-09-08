@@ -82,9 +82,12 @@ class MainActivity : AppCompatActivity() {
 
             // Weather
             val city = PrefsManager.getWeatherCity(ctx)
-            val apiKey = PrefsManager.getWeatherApiKey(ctx)
-            if (city.isNotBlank() && apiKey.isNotBlank()) {
-                val weather = WeatherFetcher.fetch(city, apiKey)
+            if (city.isNotBlank()) {
+                val weather = WeatherFetcher.fetch(
+                    city,
+                    PrefsManager.getWeatherStepHours(ctx),
+                    PrefsManager.getWeatherSlots(ctx)
+                )
                 if (weather != null) {
                     PrefsManager.setWeatherCache(ctx, weather.toJson())
                     results.add(getString(R.string.weather_ok))

@@ -58,10 +58,11 @@ class LockScreenActivity : AppCompatActivity() {
     private lateinit var dateText: TextView
 
     // Weather
-    private lateinit var weatherSection: LinearLayout
+
     private lateinit var weatherCurrentText: TextView
     private lateinit var weatherDayNightText: TextView
     private lateinit var weatherSummary: LinearLayout
+    private lateinit var weatherForecastRow: LinearLayout
 
     // News
     private lateinit var newsSection: FrameLayout
@@ -190,10 +191,11 @@ class LockScreenActivity : AppCompatActivity() {
         clockText = findViewById(R.id.clockText)
         dateText = findViewById(R.id.dateText)
 
-        weatherSection = findViewById(R.id.weatherSection)
+
         weatherCurrentText = findViewById(R.id.weatherCurrentText)
         weatherDayNightText = findViewById(R.id.weatherDayNightText)
         weatherSummary = findViewById(R.id.weatherSummary)
+        weatherForecastRow = findViewById(R.id.weatherForecastRow)
 
         newsSection = findViewById(R.id.newsSection)
         newsText = findViewById(R.id.newsText)
@@ -341,44 +343,72 @@ class LockScreenActivity : AppCompatActivity() {
     // ════════ Display ════════
 
     /**
-     * OpenWeatherMap icon code ("10d", "01n", …) to emoji. Preferred over
-     * [weatherIcon]: the code does not change with the request language, while
-     * the description does. Falls back to the description when an older cache
-     * has no code stored.
+     * Weather code to emoji. Handles both what the current source stores and
+     * what the previous one did, because a cache written before the switch to
+     * Open-Meteo is still valid until the next fetch:
+     *
+     *  - a WMO code as a plain number ("0", "61", "95") — Open-Meteo
+     *  - an OpenWeatherMap icon id ("10d", "01n")
+     *  - neither, in which case the description is matched as a last resort
      */
-    private fun weatherIconForCode(code: String, fallbackDesc: String): String {
+    private fun weatherIconForCode(code: String, fallbackDesc: String, isDay: Boolean = true): String {
+        val wmo = code.toIntOrNull()
+        if (wmo != null) {
+            return when (wmo) {
+                0 -> if (isDay) "☀️" else "🌙"                  // clear
+                1, 2 -> "⛅"                                                   // partly cloudy
+                3 -> "☁️"                                                // overcast
+                45, 48 -> "🌫️"                                     // fog
+                in 51..57 -> "🌦️"                                  // drizzle
+                in 61..67 -> "☔"                                              // rain
+                in 71..77 -> "❄️"                                        // snow
+                in 80..82 -> "🌧️"                                  // rain showers
+                85, 86 -> "❄️"                                           // snow showers
+                95, 96, 99 -> "⚡"                                             // thunderstorm
+                else -> "☁️"
+            }
+        }
         // The trailing d/n is day/night; only the clear-sky icon differs by it.
         return when (code.take(2)) {
-            "01" -> if (code.endsWith("n")) "🌙" else "☀️"  // clear
-            "02" -> "⛅"                                                     // few clouds
-            "03" -> "☁️"                                               // scattered
-            "04" -> "☁️"                                               // broken
-            "09" -> "🌧️"                                         // shower
-            "10" -> "☔"                                                     // rain
-            "11" -> "⚡"                                                     // thunderstorm
-            "13" -> "❄️"                                               // snow
-            "50" -> "🌫️"                                         // mist
+            "01" -> if (code.endsWith("n")) "🌙" else "☀️"
+            "02" -> "⛅"
+            "03", "04" -> "☁️"
+            "09" -> "🌧️"
+            "10" -> "☔"
+            "11" -> "⚡"
+            "13" -> "❄️"
+            "50" -> "🌫️"
             else -> weatherIcon(fallbackDesc)
         }
     }
 
     /**
-     * One three-hour slot: hour on top, then the icon with a small two-line
+     * One forecast slot: hour on top, then the icon with a small two-line
      * precipitation column beside it, then the temperature. The column appears
      * only when rain or snow is actually expected — see [WeatherData.ForecastItem.hasPrecip].
+     *
+     * [baseSp] is small by design (7-10sp): these sit in the corner beside the
+     * clock, so the sizes here are offsets from it rather than from the module
+     * font size.
      */
     private fun buildForecastSlot(item: WeatherData.ForecastItem, baseSp: Float): View {
         val density = resources.displayMetrics.density
         val slot = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+            // wrap_content, not weight: the row itself is wrap_content in the
+            // corner, so weights would collapse every slot to nothing.
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).apply { marginStart = (6 * density).toInt() }
         }
 
         slot.addView(TextView(this).apply {
             text = item.hour
-            textSize = baseSp - 3f
+            textSize = baseSp
             setTextColor(0xFF555555.toInt())
+            includeFontPadding = false
         })
 
         val iconRow = LinearLayout(this).apply {
@@ -386,8 +416,9 @@ class LockScreenActivity : AppCompatActivity() {
             gravity = Gravity.CENTER_VERTICAL
         }
         iconRow.addView(TextView(this).apply {
-            text = weatherIconForCode(item.icon, "")
-            textSize = baseSp + 2f
+            text = weatherIconForCode(item.icon, "", item.isDay)
+            textSize = baseSp + 3f
+            includeFontPadding = false
         })
         if (item.hasPrecip) {
             val precip = LinearLayout(this).apply {
@@ -399,14 +430,14 @@ class LockScreenActivity : AppCompatActivity() {
             }
             precip.addView(TextView(this).apply {
                 text = "${item.pop}%"
-                textSize = baseSp - 5f
+                textSize = baseSp - 1f
                 setTextColor(0xFF333333.toInt())
                 includeFontPadding = false
             })
             if (item.precipMm > 0.0) {
                 precip.addView(TextView(this).apply {
                     text = getString(R.string.weather_precip_mm, item.precipMm)
-                    textSize = baseSp - 5f
+                    textSize = baseSp - 1f
                     setTextColor(0xFF555555.toInt())
                     includeFontPadding = false
                 })
@@ -418,8 +449,9 @@ class LockScreenActivity : AppCompatActivity() {
         slot.addView(TextView(this).apply {
             val sign = if (item.temp > 0) "+" else ""
             text = "$sign${item.temp}°"
-            textSize = baseSp - 1f
+            textSize = baseSp + 1f
             setTextColor(0xFF000000.toInt())
+            includeFontPadding = false
         })
 
         return slot
@@ -442,7 +474,9 @@ class LockScreenActivity : AppCompatActivity() {
 
     private fun getModuleView(key: String): View? = when (key) {
         "clock" -> headerRow
-        "weather" -> weatherSection
+        // Weather now lives inside the header row, so it owns no slot in the
+        // stack. The key stays valid for saved orders; mapNotNull skips it.
+        "weather" -> null
         "news" -> newsSection
         "notes" -> stickersSection
         "book" -> bookSection
@@ -516,7 +550,7 @@ class LockScreenActivity : AppCompatActivity() {
                 val weather = WeatherData.fromJson(weatherJson)
                 if (weather != null) {
                     val weatherFontSize = PrefsManager.getFontSizeWeather(ctx).toFloat()
-                    val icon = weatherIconForCode(weather.currentIcon, weather.currentDesc)
+                    val icon = weatherIconForCode(weather.currentIcon, weather.currentDesc, weather.currentIsDay)
                     val tempSign = if (weather.currentTemp > 0) "+" else ""
                     // The summary sits beside the clock now, so it drops the long
                     // description \u2014 that line would push the row off the screen.
@@ -529,25 +563,26 @@ class LockScreenActivity : AppCompatActivity() {
                     weatherDayNightText.textSize = weatherFontSize - 3f
                     weatherSummary.visibility = View.VISIBLE
 
-                    weatherSection.removeAllViews()
+                    // Deliberately much smaller than the summary: four slots with
+                    // an icon and a precipitation column each have to fit the
+                    // corner beside the clock.
+                    val slotSize = (weatherFontSize - 6f).coerceIn(7f, 10f)
+                    weatherForecastRow.removeAllViews()
                     if (weather.forecast.isNotEmpty()) {
                         for (item in weather.forecast) {
-                            weatherSection.addView(buildForecastSlot(item, weatherFontSize))
+                            weatherForecastRow.addView(buildForecastSlot(item, slotSize))
                         }
-                        weatherSection.visibility = View.VISIBLE
+                        weatherForecastRow.visibility = View.VISIBLE
                     } else {
-                        weatherSection.visibility = View.GONE
+                        weatherForecastRow.visibility = View.GONE
                     }
                 } else {
-                    weatherSection.visibility = View.GONE
                     weatherSummary.visibility = View.GONE
                 }
             } else {
-                weatherSection.visibility = View.GONE
                 weatherSummary.visibility = View.GONE
             }
         } else {
-            weatherSection.visibility = View.GONE
             weatherSummary.visibility = View.GONE
         }
 

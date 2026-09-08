@@ -17,6 +17,8 @@ object PrefsManager {
     private const val KEY_WEATHER_CITY = "weather_city"
     private const val KEY_WEATHER_API_KEY = "weather_api_key"
     private const val KEY_WEATHER_INTERVAL_MIN = "weather_interval_min"
+    private const val KEY_WEATHER_STEP_HOURS = "weather_forecast_step_hours"
+    private const val KEY_WEATHER_SLOTS = "weather_forecast_slots"
     private const val KEY_WEATHER_CACHE_JSON = "weather_cache_json"
     private const val KEY_WEATHER_CACHE_TIME_MS = "weather_cache_time_ms"
 
@@ -145,7 +147,24 @@ object PrefsManager {
     }
 
     fun isWeatherEnabled(context: Context): Boolean =
-        getWeatherCity(context).isNotBlank() && getWeatherApiKey(context).isNotBlank()
+        // Open-Meteo needs no API key; the city is the only requirement now.
+        getWeatherCity(context).isNotBlank()
+
+    /** Hours between forecast slots, 1-6. Open-Meteo is hourly, so any value is real. */
+    fun getWeatherStepHours(context: Context): Int =
+        prefs(context).getInt(KEY_WEATHER_STEP_HOURS, 3)
+
+    fun setWeatherStepHours(context: Context, hours: Int) {
+        prefs(context).edit().putInt(KEY_WEATHER_STEP_HOURS, hours.coerceIn(1, 6)).apply()
+    }
+
+    /** How many forecast slots to draw, 0-4. Zero hides the strip. */
+    fun getWeatherSlots(context: Context): Int =
+        prefs(context).getInt(KEY_WEATHER_SLOTS, 4)
+
+    fun setWeatherSlots(context: Context, count: Int) {
+        prefs(context).edit().putInt(KEY_WEATHER_SLOTS, count.coerceIn(0, 4)).apply()
+    }
 
     // ════════ News ════════
 
