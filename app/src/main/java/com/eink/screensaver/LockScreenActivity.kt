@@ -498,20 +498,55 @@ class LockScreenActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * Applies the clock-position setting to the whole header row: the clock and
+     * the weather always sit on opposite sides, so putting the clock on the
+     * right swaps their order and mirrors the alignment of both.
+     */
     private fun applyClockPosition() {
-        val position = PrefsManager.getClockPosition(this)
-        val gravity = if (position == "right") android.view.Gravity.END else android.view.Gravity.START
+        val clockOnRight = PrefsManager.getClockPosition(this) == "right"
+        val clockGravity = if (clockOnRight) Gravity.END else Gravity.START
+        val weatherGravity = if (clockOnRight) Gravity.START else Gravity.END
 
-        clockText.gravity = gravity
-        dateText.gravity = gravity
+        clockText.gravity = clockGravity
+        dateText.gravity = clockGravity
 
         val lp = clockText.layoutParams as LinearLayout.LayoutParams
-        lp.gravity = gravity
+        lp.gravity = clockGravity
         clockText.layoutParams = lp
 
         val dlp = dateText.layoutParams as LinearLayout.LayoutParams
-        dlp.gravity = gravity
+        dlp.gravity = clockGravity
         dateText.layoutParams = dlp
+
+        weatherSummary.gravity = weatherGravity
+        weatherCurrentText.gravity = weatherGravity
+        weatherDayNightText.gravity = weatherGravity
+        weatherForecastRow.gravity = weatherGravity
+
+        // The 12dp gap belongs between the two columns, so it moves to whichever
+        // side of the weather block faces the clock.
+        val gap = (12 * resources.displayMetrics.density).toInt()
+        (weatherSummary.layoutParams as LinearLayout.LayoutParams).apply {
+            marginStart = if (clockOnRight) 0 else gap
+            marginEnd = if (clockOnRight) gap else 0
+            weatherSummary.layoutParams = this
+        }
+
+        // Re-add in the right order only when it actually changed; removeAllViews
+        // on every redraw would throw away the forecast slots for nothing.
+        val clockFirst = headerRow.getChildAt(0) === clockSection
+        if (clockFirst == clockOnRight) {
+            headerRow.removeView(clockSection)
+            headerRow.removeView(weatherSummary)
+            if (clockOnRight) {
+                headerRow.addView(weatherSummary)
+                headerRow.addView(clockSection)
+            } else {
+                headerRow.addView(clockSection)
+                headerRow.addView(weatherSummary)
+            }
+        }
     }
 
     private fun updateDisplay() {
@@ -783,7 +818,10 @@ class LockScreenActivity : AppCompatActivity() {
                 layoutParams = FrameLayout.LayoutParams(
                     FrameLayout.LayoutParams.MATCH_PARENT,
                     FrameLayout.LayoutParams.WRAP_CONTENT
-                ).apply { topMargin = 20 }
+                // 24dp in pixels, matching the offset the news and book sections
+                // use. The old value was 20 raw pixels, which is shorter than the
+                // 12sp name label on this density, so the notes overlapped it.
+                ).apply { topMargin = (24 * resources.displayMetrics.density).toInt() }
                 setLineSpacing(0f, 1.3f)
             }
             frame.addView(notesView)

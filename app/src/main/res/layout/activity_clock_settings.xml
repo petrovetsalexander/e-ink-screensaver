@@ -141,7 +141,7 @@
             android:layout_height="wrap_content"
             android:min="24"
             android:max="120"
-            android:progress="72"
+            android:progress="56"
             android:layout_marginBottom="32dp" />
 
         <!-- ═══════ Weather ═══════
@@ -234,7 +234,7 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:max="5"
-                android:progress="2" />
+                android:progress="0" />
 
             <TextView
                 android:id="@+id/weatherStepValue"

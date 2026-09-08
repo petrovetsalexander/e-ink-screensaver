@@ -144,7 +144,7 @@ object PrefsManager {
 
     /** Hours between forecast slots, 1-6. Open-Meteo is hourly, so any value is real. */
     fun getWeatherStepHours(context: Context): Int =
-        prefs(context).getInt(KEY_WEATHER_STEP_HOURS, 3)
+        prefs(context).getInt(KEY_WEATHER_STEP_HOURS, 1)
 
     fun setWeatherStepHours(context: Context, hours: Int) {
         prefs(context).edit().putInt(KEY_WEATHER_STEP_HOURS, hours.coerceIn(1, 6)).apply()
@@ -325,7 +325,7 @@ object PrefsManager {
     // ════════ Font sizes ════════
 
     fun getFontSizeClock(context: Context): Int =
-        prefs(context).getInt(KEY_FONT_SIZE_CLOCK, 72)
+        prefs(context).getInt(KEY_FONT_SIZE_CLOCK, 56)
 
     fun setFontSizeClock(context: Context, sp: Int) {
         prefs(context).edit().putInt(KEY_FONT_SIZE_CLOCK, sp).apply()
