@@ -127,7 +127,7 @@
     <string name="label_news">Новости</string>
     <string name="label_notes">Заметки</string>
     <string name="label_book">Книга</string>
-    <string name="unlock_hint">Нажмите на кнопку разблокировки, чтобы выйти из режима скринсейвера</string>
+    <string name="unlock_hint">Нажмите или дотроньтесь до кнопки разблокировки, чтобы выйти из режима скринсейвера</string>
 
     <!-- Notifications -->
     <string name="channel_screensaver">E-Ink Скринсейвер</string>
