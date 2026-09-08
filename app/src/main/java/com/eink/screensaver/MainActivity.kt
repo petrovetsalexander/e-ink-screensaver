@@ -60,6 +60,15 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(this, SettingsActivity::class.java))
         }
 
+        // Opens the real lock screen in preview mode rather than a mock-up, so it
+        // cannot drift from what actually gets drawn. Tap or Back closes it.
+        findViewById<ImageButton>(R.id.btnPreview).setOnClickListener {
+            startActivity(
+                Intent(this, LockScreenActivity::class.java)
+                    .putExtra(LockScreenActivity.EXTRA_PREVIEW, true)
+            )
+        }
+
         btnSync.setOnClickListener { performSync() }
 
         btnNewSticker.setOnClickListener { showCreateStickerDialog() }

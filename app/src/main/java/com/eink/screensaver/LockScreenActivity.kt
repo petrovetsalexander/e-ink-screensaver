@@ -42,6 +42,17 @@ class LockScreenActivity : AppCompatActivity() {
         const val TAG = "LockScreenAct"
         const val ACTION_FINISH = "com.eink.screensaver.ACTION_FINISH_LOCKSCREEN"
         const val ACTION_UPDATE_DISPLAY = "com.eink.screensaver.ACTION_UPDATE_DISPLAY"
+
+        /**
+         * Opens the same screen as a preview from the app, so what is on show is
+         * the real thing rather than a second copy of the layout that could
+         * drift. Everything tied to being an actual lock screen is skipped: the
+         * screen stays at its normal brightness, the unlock poll never runs (it
+         * would finish the activity at once on an unlocked device), and
+         * [isActive] is left alone so the service still knows to launch for a
+         * genuine lock.
+         */
+        const val EXTRA_PREVIEW = "com.eink.screensaver.EXTRA_PREVIEW"
         private const val UNLOCK_POLL_INTERVAL_MS = 1000L
         private const val EINK_FULL_REFRESH_DELAY_MS = 100L
 
@@ -81,6 +92,7 @@ class LockScreenActivity : AppCompatActivity() {
     private lateinit var keyguardManager: KeyguardManager
     private val handler = Handler(Looper.getMainLooper())
     private var isPollingActive = false
+    private var isPreview = false
 
     private val unlockPollRunnable = object : Runnable {
         override fun run() {
@@ -137,41 +149,46 @@ class LockScreenActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
 
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
+        isPreview = intent?.getBooleanExtra(EXTRA_PREVIEW, false) == true
 
-        // Set brightness to 0 FIRST, before turning screen on.
-        // This minimizes frontlight flash on e-ink — the window's brightness attribute
-        // is applied as the screen wakes. On xrz firmware the service has already
-        // dropped the hardware frontlight in onScreenOff(), so this is the second
-        // line of defence rather than the only one.
-        window.attributes = window.attributes.apply {
-            screenBrightness = 0.0f
-        }
-        EinkCompat.dimFrontlight(this)
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            // setTurnScreenOn issues its own wake, carrying WindowManager's details
-            // string rather than the service's — which clears the vendor's
-            // wake-up-only flag and brings the frontlight straight back up. When
-            // the service took the tagged wake lock the panel is already on, so
-            // asking again is both redundant and the thing that reintroduces the
-            // flash. Without that path we still need it.
-            if (!ScreenSaverService.canUseVendorWake()) {
-                setTurnScreenOn(true)
+        if (!isPreview) {
+            // Set brightness to 0 FIRST, before turning screen on.
+            // This minimizes frontlight flash on e-ink — the window's brightness
+            // attribute is applied as the screen wakes. On xrz firmware the service
+            // has already dropped the hardware frontlight in onScreenOff(), so this
+            // is the second line of defence rather than the only one.
+            window.attributes = window.attributes.apply {
+                screenBrightness = 0.0f
             }
-        } else {
+            EinkCompat.dimFrontlight(this)
+        }
+
+        if (!isPreview) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                // setTurnScreenOn issues its own wake, carrying WindowManager's
+                // details string rather than the service's — which clears the
+                // vendor's wake-up-only flag and brings the frontlight straight
+                // back up. When the service took the tagged wake lock the panel is
+                // already on, so asking again is both redundant and the thing that
+                // reintroduces the flash. Without that path we still need it.
+                if (!ScreenSaverService.canUseVendorWake()) {
+                    setTurnScreenOn(true)
+                }
+            } else {
+                @Suppress("DEPRECATION")
+                window.addFlags(
+                    WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                    WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
+                )
+            }
+
             @Suppress("DEPRECATION")
-            window.addFlags(
-                WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-            )
+            window.addFlags(WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON)
         }
 
         @Suppress("DEPRECATION")
-        window.addFlags(
-            WindowManager.LayoutParams.FLAG_ALLOW_LOCK_WHILE_SCREEN_ON or
-            WindowManager.LayoutParams.FLAG_FULLSCREEN
-        )
+        window.addFlags(WindowManager.LayoutParams.FLAG_FULLSCREEN)
 
         @Suppress("DEPRECATION")
         window.decorView.systemUiVisibility = (
@@ -209,6 +226,12 @@ class LockScreenActivity : AppCompatActivity() {
         bookAuthorText = findViewById(R.id.bookAuthorText)
         bookAnnotationText = findViewById(R.id.bookAnnotationText)
 
+        if (isPreview) {
+            // The screen is immersive with no visible navigation, so a tap has to
+            // close it as well as Back.
+            findViewById<View>(R.id.touchInterceptor).setOnClickListener { finish() }
+        }
+
         registerReceivers()
 
         // Ask the panel for a full flashing waveform on every update of this window.
@@ -231,8 +254,16 @@ class LockScreenActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
-        isActive = true
         Log.d(TAG, "onResume")
+
+        if (isPreview) {
+            // isActive stays false: it is the service's guard for whether a real
+            // lock screen is already up, and a preview must not suppress one.
+            updateDisplay()
+            return
+        }
+
+        isActive = true
 
         if (!keyguardManager.isDeviceLocked) {
             Log.d(TAG, "onResume: device already unlocked → finish")
@@ -252,10 +283,15 @@ class LockScreenActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         stopUnlockPolling()
+        // The activity is singleTask, so a preview left in the background would be
+        // handed to the service's next launch through onNewIntent and would keep
+        // behaving like a preview — full brightness, no unlock poll. Ending it
+        // here means only a real lock screen can ever be the live instance.
+        if (isPreview) finish()
     }
 
     override fun onDestroy() {
-        isActive = false
+        if (!isPreview) isActive = false
         handler.removeCallbacksAndMessages(null)
         unregisterReceivers()
         Log.d(TAG, "Activity destroyed")
@@ -264,8 +300,14 @@ class LockScreenActivity : AppCompatActivity() {
 
     // ════════ Touch blocking ════════
 
+    /** Back is swallowed on the real lock screen; a preview has to be closable. */
     @Deprecated("Deprecated in Java")
-    override fun onBackPressed() {}
+    override fun onBackPressed() {
+        if (isPreview) {
+            @Suppress("DEPRECATION")
+            super.onBackPressed()
+        }
+    }
 
     /**
      * This activity sits over the keyguard with setShowWhenLocked, so pressing

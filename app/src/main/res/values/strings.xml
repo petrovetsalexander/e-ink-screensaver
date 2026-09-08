@@ -97,6 +97,7 @@
     <!-- Notes (MainActivity) -->
     <string name="notes_title">Notes</string>
     <string name="sync">Sync</string>
+    <string name="preview">Preview</string>
     <string name="new_note_hint">New note</string>
     <string name="add">Add</string>
     <string name="syncing">Syncing…</string>
