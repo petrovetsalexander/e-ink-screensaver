@@ -7,3 +7,6 @@
 .DS_Store
 .kotlin
 .claude/settings.local.json
+
+# Built APKs staged for a release — the binary belongs in Releases, not in git
+dist/
