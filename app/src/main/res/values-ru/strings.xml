@@ -97,6 +97,7 @@
     <!-- Notes (MainActivity) -->
     <string name="notes_title">Заметки</string>
     <string name="sync">Синхронизация</string>
+    <string name="preview">Предпросмотр</string>
     <string name="new_note_hint">Новая заметка</string>
     <string name="add">Добавить</string>
     <string name="syncing">Синхронизация…</string>
