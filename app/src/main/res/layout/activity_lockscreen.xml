@@ -47,7 +47,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="00:00"
-                    android:textSize="60sp"
+                    android:textSize="56sp"
                     android:textColor="#000000"
                     android:fontFamily="sans-serif-light"
                     android:letterSpacing="0.05"
@@ -65,10 +65,16 @@
                     android:includeFontPadding="false" />
             </LinearLayout>
 
+            <!-- match_parent so the column is as tall as the clock beside it, and
+                 the spacer below pushes the forecast strip to the bottom: the two
+                 halves of the row then line up top and bottom.
+                 includeFontPadding is off everywhere here for the same reason it
+                 is off on the clock — otherwise the first line sits a few pixels
+                 higher than the clock's. -->
             <LinearLayout
                 android:id="@+id/weatherSummary"
                 android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
+                android:layout_height="match_parent"
                 android:orientation="vertical"
                 android:gravity="end"
                 android:layout_marginStart="12dp"
@@ -81,7 +87,8 @@
                     android:textSize="16sp"
                     android:textColor="#000000"
                     android:gravity="end"
-                    android:fontFamily="sans-serif" />
+                    android:fontFamily="sans-serif"
+                    android:includeFontPadding="false" />
 
                 <TextView
                     android:id="@+id/weatherDayNightText"
@@ -91,7 +98,13 @@
                     android:textColor="#333333"
                     android:gravity="end"
                     android:fontFamily="sans-serif"
+                    android:includeFontPadding="false"
                     android:layout_marginTop="2dp" />
+
+                <View
+                    android:layout_width="1dp"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
 
                 <!-- Forecast slots live in the corner too, built in
                      buildForecastSlot() at a deliberately small size. -->
@@ -122,7 +135,7 @@
                 android:id="@+id/newsText"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="16dp"
+                android:layout_marginTop="24dp"
                 android:textSize="13sp"
                 android:textColor="#000000"
                 android:fontFamily="sans-serif"
@@ -163,7 +176,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
                 android:orientation="horizontal"
-                android:layout_marginTop="16dp">
+                android:layout_marginTop="24dp">
 
                 <ImageView
                     android:id="@+id/bookCoverImage"
