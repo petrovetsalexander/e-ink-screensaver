@@ -55,8 +55,6 @@
     <string name="weather_slots_title">Forecast slots</string>
     <string name="weather_slots_value">%d</string>
     <string name="weather_slots_off">off</string>
-    <string name="save_weather">Save weather</string>
-    <string name="weather_saved">Weather saved</string>
 
     <!-- News -->
     <string name="news_title">News</string>
@@ -74,15 +72,11 @@
     <string name="news_shuffle">Shuffle</string>
     <string name="news_shuffle_hint">Random selection each time</string>
     <string name="news_shuffle_explanation">When active, a random selection of news is picked from all cached headlines each time you lock your phone. The number of shown headlines is controlled by \"News to show at once\" setting.</string>
-    <string name="save_news">Save news</string>
-    <string name="news_saved">News saved</string>
 
     <!-- Yandex Books (Bookmate) -->
     <string name="yandex_books_title">Yandex Books</string>
     <string name="yandex_books_description">Latest book from library</string>
     <string name="bookmate_user_id_hint">User ID (e.g. b1234567890)</string>
-    <string name="save_yandex_books">Save Yandex Books</string>
-    <string name="yandex_books_saved">Yandex Books saved</string>
 
     <!-- How it works -->
     <string name="how_it_works">How it works?</string>
