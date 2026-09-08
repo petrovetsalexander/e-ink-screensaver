@@ -137,6 +137,7 @@
     <string name="notification_stop">Stop</string>
 
     <!-- Weather display -->
+    <string name="weather_precip_mm">%.1f mm</string>
     <string name="weather_day">Day</string>
     <string name="weather_night">Night</string>
 

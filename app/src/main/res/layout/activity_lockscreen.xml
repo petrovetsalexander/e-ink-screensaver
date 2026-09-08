@@ -24,35 +24,76 @@
         android:paddingTop="32dp"
         android:paddingBottom="80dp">
 
-        <!-- Clock section -->
+        <!-- Header row: clock on the left, weather summary on the right.
+             This whole row is the "clock" module slot in reorderModules(); the
+             three-hour forecast strip below stays the "weather" slot, so both
+             remain draggable. -->
         <LinearLayout
-            android:id="@+id/clockSection"
+            android:id="@+id/headerRow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
             android:layout_marginBottom="16dp">
 
-            <TextView
-                android:id="@+id/clockText"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:id="@+id/clockSection"
+                android:layout_width="0dp"
+                android:layout_weight="1"
                 android:layout_height="wrap_content"
-                android:text="00:00"
-                android:textSize="72sp"
-                android:textColor="#000000"
-                android:fontFamily="sans-serif-light"
-                android:letterSpacing="0.05"
-                android:includeFontPadding="false" />
+                android:orientation="vertical">
 
-            <TextView
-                android:id="@+id/dateText"
-                android:layout_width="match_parent"
+                <TextView
+                    android:id="@+id/clockText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="00:00"
+                    android:textSize="72sp"
+                    android:textColor="#000000"
+                    android:fontFamily="sans-serif-light"
+                    android:letterSpacing="0.05"
+                    android:includeFontPadding="false" />
+
+                <TextView
+                    android:id="@+id/dateText"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text=""
+                    android:textSize="16sp"
+                    android:textColor="#333333"
+                    android:fontFamily="sans-serif"
+                    android:layout_marginTop="4dp"
+                    android:includeFontPadding="false" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:id="@+id/weatherSummary"
+                android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text=""
-                android:textSize="16sp"
-                android:textColor="#333333"
-                android:fontFamily="sans-serif"
-                android:layout_marginTop="4dp"
-                android:includeFontPadding="false" />
+                android:orientation="vertical"
+                android:gravity="end"
+                android:layout_marginStart="12dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/weatherCurrentText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="16sp"
+                    android:textColor="#000000"
+                    android:gravity="end"
+                    android:fontFamily="sans-serif" />
+
+                <TextView
+                    android:id="@+id/weatherDayNightText"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:textSize="13sp"
+                    android:textColor="#333333"
+                    android:gravity="end"
+                    android:fontFamily="sans-serif"
+                    android:layout_marginTop="2dp" />
+            </LinearLayout>
         </LinearLayout>
 
         <!-- Weather section -->
@@ -60,36 +101,13 @@
             android:id="@+id/weatherSection"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:orientation="vertical"
+            android:orientation="horizontal"
+            android:baselineAligned="false"
             android:layout_marginBottom="12dp"
-            android:visibility="gone">
+            android:visibility="gone" />
+        <!-- Three-hour forecast slots are built in buildForecastSlot(): each is
+             hour / icon + optional precipitation column / temperature. -->
 
-            <TextView
-                android:id="@+id/weatherCurrentText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="16sp"
-                android:textColor="#000000"
-                android:fontFamily="sans-serif" />
-
-            <TextView
-                android:id="@+id/weatherDayNightText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="13sp"
-                android:textColor="#333333"
-                android:fontFamily="sans-serif"
-                android:layout_marginTop="2dp" />
-
-            <TextView
-                android:id="@+id/weatherForecastText"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:textSize="12sp"
-                android:textColor="#555555"
-                android:fontFamily="sans-serif"
-                android:layout_marginTop="2dp" />
-        </LinearLayout>
 
         <!-- News section -->
         <FrameLayout
