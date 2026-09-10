@@ -34,7 +34,9 @@ adb shell settings put secure enabled_accessibility_services com.eink.screensave
 adb shell settings put secure accessibility_enabled 1
 ```
 
-The durable fix, if this gets annoying, is `SYSTEM_ALERT_WINDOW` — a granted overlay permission is a documented BAL exemption and would make the launch work with the accessibility service in any state.
+The durable fix, if this gets annoying, is `SYSTEM_ALERT_WINDOW` — a granted overlay permission is a documented BAL exemption and would make the launch work with the accessibility service in any state. **The permission is now declared** and `SettingsActivity` offers it through `Settings.ACTION_MANAGE_OVERLAY_PERMISSION`; nothing in the app draws an overlay window, the grant exists only for the exemption. It is optional and unrelated to the vendor path — with it granted, the no-accessibility fallback actually gets to draw instead of leaving the stock keyguard up at full brightness.
+
+The accessibility toggle also clears itself in normal use, which the app can now see: `PrefsManager.wasA11yGranted` remembers that it was once on, `ScreenSaverService.onScreenOff` compares that against the live state and logs `A11Y_LOST`, and the foreground notification switches to `notification_a11y_warning` for as long as the service is unbound. `SettingsActivity` says the same thing next to the toggle. The known causes are *Allow restricted settings* never having been granted, an app update, and a low-memory kill — in the last two cases `AccessibilityManagerService` files the service under `Crashed services:` and never rebinds.
 
 ## Project Overview
 
@@ -103,11 +105,30 @@ Each fetcher's result is serialized to JSON by hand (`org.json`) and stored in p
 ### Settings UI
 
 - `MainActivity` (launcher) is **not** the settings screen — it is the stickers/notes editor: create/rename/delete stickers, add/complete/delete notes inside the selected one, toggle per-sticker visibility, plus a manual sync button that runs all fetchers on demand. Stickers are a `JSONArray` in prefs (`notes_stickers_json`), with a one-time migration from the older flat `notes_json`.
-- `settings/SettingsActivity` — service on/off, permission gates, language, entry to modules, about/how-it-works dialogs.
+- `settings/SettingsActivity` — service on/off, permission gates, language, entry to modules, the diagnostics block (event-log checkbox, share, clear), about/how-it-works dialogs. The permission block is one row per permission — label with ✓/✗, a `?` that opens `showPermissionHelp` with that permission's hint string, and its grant button — plus `a11yLostWarning`, the one message shown inline because it reports a change rather than explaining a choice. Adding a permission means a row in `activity_settings.xml`, a title/hint string pair in **both** `values/` and `values-ru/`, and its line in `updateUI`.
 - `settings/ModuleSettingsActivity` — drag-to-reorder (`ItemTouchHelper`) + enable checkboxes, and navigation into the five per-module screens.
 - `settings/{Clock,Weather,News,Notes,Book}SettingsActivity` — one screen per module. All of them follow the same shape: read prefs into widgets in `onCreate`, write back on change (`if (fromUser)` for SeekBars). There is no save button and no validation layer.
 
 `PrefsManager` is a stateless `object` — every accessor takes a `Context`. It is the single source of truth; nothing else calls `getSharedPreferences`. Note the "enabled" concepts are distinct: `isEnabled` (service running), `isBlockXEnabled` (module shown), and `isWeatherEnabled`/`isNewsEnabled`/`isBookmateEnabled` (source is *configured*, derived from whether its credentials/URL are set).
+
+### The event log (`EventLog`)
+
+The interesting failures happen while the device is asleep and off the cable, and by the time it is plugged back in the logcat ring buffer has rolled over. `EventLog` is the answer: an opt-in trace of the lock cycle, written to `filesDir/logs/events.log` and mirrored to logcat under each subsystem's own tag.
+
+- **Off by default** (`PrefsManager.isEventLogEnabled`), and genuinely off — `EventLog.enabled` is a volatile read at the top of `log()`, so with it false nothing is formatted or written. Settings → Diagnostics has the checkbox, a *Share log* button and a *Clear* button.
+- `EinkApp` (the `Application` subclass, added for this) calls `EventLog.init` so the trace covers whichever entry point the system starts first.
+- Writes go through one `HandlerThread`; timestamps are taken at the call, so ordering is right even though the write is not synchronous. Rotates at 512 KB into `events-prev.log`, two files max.
+- Line format is `MM-dd HH:mm:ss.SSS [elapsedRealtime] SRC EVENT k=v …`, close enough to `logcat -v time` to read side by side. The bracketed number keeps counting while the device sleeps, so the gap between two lines is how long the phone was down.
+- Every session and every export starts with `EventLog.snapshot`: firmware, vendor-path availability, accessibility bound/enabled, overlay grant, keyguard state, both brightness values, `screen_off_timeout`, `hidden_api_policy`. Most questions a trace raises are answered there.
+- Sharing goes through a `FileProvider` (`${applicationId}.fileprovider`, `res/xml/file_paths.xml`) as `text/plain`, so the file survives being forwarded.
+
+Event names are grep targets and must not drift. The vocabulary: `SCREEN_OFF` / `SCREEN_OFF_OURS` / `SCREEN_ON` / `USER_PRESENT`, `PATH` (which branch the lock cycle took), `WAKE` / `WAKE_RATELIMIT` / `BREAKER_TRIP`, `LAUNCH` / `LAUNCH_FAIL` / `LAUNCH_SKIP`, `SLEEP` / `SLEEP_OK` / `SLEEP_SKIP` / `SLEEP_FAIL` / `SLEEP_NOT_TAKEN`, `CREATE` / `RESUME` / `STOP` / `DESTROY`, `DRAW` (`mode=full|partial`), `EXIT_CLEAR`, `PROMPT` and its outcomes (`PROMPT_REFUSED`, `PROMPT_DISMISSED`, `PROMPT_CANCELLED`, `PROMPT_GIVE_UP`, `PROMPT_SKIP`), `UNLOCK`, `DIM` / `RESTORE` and their `_SKIP`/`_FAIL` variants, `A11Y_MISSING` / `A11Y_LOST` / `CONNECTED` / `UNBOUND` / `INTERRUPT` / `LOCK_ACTION`, `ALARM_CLOCK` / `ALARM_FETCH` / `FETCH_DONE` / `FETCH_FAIL`, `CALL_GUARD`.
+
+### The keyguard prompt
+
+`setShowWhenLocked` means a power press lights the panel on the dashboard and nothing else — no pattern, no fingerprint hint — so `LockScreenActivity` asks for `requestDismissKeyguard`. The request arrives on the `SCREEN_ON` broadcast, which the system sends *before* the activity is resumed, and a dismiss request from an unresumed activity is refused. Nothing throws; the ask simply goes nowhere. That is the "sometimes no pattern appears, but the fingerprint sensor still works" report — the sensor is the keyguard's own and never needed us.
+
+So the request is now lifecycle-driven: `promptForUnlockIfUserWoke` only records the intent in `unlockPromptPending`, and `requestUnlockPrompt` runs from the broadcast, `onResume` and `onWindowFocusChanged`, debounced to one ask per `PROMPT_DEBOUNCE_MS`. It passes a `KeyguardDismissCallback`, which is the only way to learn that an ask was refused, and a refusal is re-tried up to `PROMPT_MAX_RETRIES` times `PROMPT_RETRY_MS` apart. `onUserInteraction` asks again as well, so a touch is the manual way out when everything else has failed.
 
 ### Localization
 
@@ -183,7 +204,7 @@ The original complaint most likely was the stock screensaver: `com.xrz.screensav
 
 Caveats for anyone repeating this: the battery was at 100%, so `charge_counter` never moved and `actual drain` reads 0 — the per-app split is trustworthy, the absolute mAh are not. A clean run needs the battery below ~90% and wireless debugging off, which needs a USB cable that survives bulk transfers.
 - The panel takes **partial** updates for the routine redraws and one full clearing pass every three hours. `LockScreenActivity` pins the window to `PARTIAL_REFRESH_MODE` (`EinkCompat.MODE_REGAL` — 16 grey levels, no flash) in `onCreate`, and `refreshDisplay()` is the entry point for every redraw but the first: it calls `updateDisplay()` alone until `FULL_REFRESH_INTERVAL_MS` has elapsed since `lastFullRefreshMs`, then promotes the redraw to `fullRefresh()`. `lastFullRefreshMs` is a companion-object field on elapsed-realtime, so the schedule survives the activity being recreated on each lock but not a process death. Activity creation always calls `fullRefresh()` directly, on the grounds that the panel is still holding another app's pixels. `MODE_DU` is the one-line fallback if REGAL smears on some firmware.
-- **Leaving the screen clears the panel.** `clearPanelOnExit()`, called from `finishOnUnlock()` and the `ACTION_FINISH` branch, fires `forceGlobalRefresh(MODE_CLEAN)` twice: once immediately, while our content is still what the panel holds, and once `EXIT_REFRESH_DELAY_MS` (400 ms) later on a handler of its own, by which point the screen behind us has drawn. Without it the ghosting accumulated since the last full refresh stays on the panel under the launcher, because nothing else on the device knows to clear it — that is what "garbage after unlock" was. Vendor path only. Both constants are the tuning knobs: raise the delay if the second pass still catches the transition, drop the immediate pass if two flashes on unlock read as one too many.
+- **Leaving the screen clears the panel.** `clearPanelOnExit()`, called from `finishOnUnlock()` and the `ACTION_FINISH` branch, fires `forceGlobalRefresh(MODE_CLEAN)` once immediately, while our content is still what the panel holds, and then again at each of `EXIT_REFRESH_DELAYS_MS` (400 ms and 1200 ms) on a handler of its own. Without it the ghosting accumulated since the last full refresh stays on the panel under the launcher, because nothing else on the device knows to clear it — that is what "garbage after unlock" was. The late pass is there because the transition does not run to a fixed schedule: an unlock onto a cold launcher takes far longer than one onto a warm one, and a single pass at 400 ms was still landing mid-transition often enough for the garbage to survive. Vendor path only, and the array is the tuning knob — the `EXIT_CLEAR` lines in the event log say which passes actually ran.
 - The update interval is a battery/ghosting trade-off, not a UI nicety — each tick costs a wake lock and a panel refresh.
 
 ### The vendor layer (`EinkCompat`)
