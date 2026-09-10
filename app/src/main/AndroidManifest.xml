@@ -46,6 +46,7 @@
         <activity android:name="com.eink.screensaver.settings.NewsSettingsActivity" android:exported="false" />
         <activity android:name="com.eink.screensaver.settings.NotesSettingsActivity" android:exported="false" />
         <activity android:name="com.eink.screensaver.settings.BookSettingsActivity" android:exported="false" />
+        <activity android:name="com.eink.screensaver.settings.DiagnosticsActivity" android:exported="false" />
 
         <!-- Скринсейвер поверх lockscreen -->
         <activity

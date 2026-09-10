@@ -12,7 +12,6 @@ import android.text.method.LinkMovementMethod
 import android.text.util.Linkify
 import android.view.View
 import android.widget.Button
-import android.widget.CheckBox
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.RadioGroup
@@ -23,10 +22,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import androidx.core.os.LocaleListCompat
 import com.eink.screensaver.BootReceiver
-import com.eink.screensaver.EventLog
 import com.eink.screensaver.NotificationListener
 import com.eink.screensaver.PrefsManager
 import com.eink.screensaver.R
@@ -47,8 +44,6 @@ class SettingsActivity : AppCompatActivity() {
     private lateinit var btnGrantNotifAccess: Button
     private lateinit var btnGrantOverlay: Button
     private lateinit var languageGroup: RadioGroup
-    private lateinit var checkEventLog: CheckBox
-    private lateinit var eventLogStatus: TextView
 
     private val notificationPermissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -81,22 +76,6 @@ class SettingsActivity : AppCompatActivity() {
         btnGrantNotifAccess = findViewById(R.id.btnGrantNotifAccess)
         btnGrantOverlay = findViewById(R.id.btnGrantOverlay)
         languageGroup = findViewById(R.id.languageGroup)
-        checkEventLog = findViewById(R.id.checkEventLog)
-        eventLogStatus = findViewById(R.id.eventLogStatus)
-
-        checkEventLog.isChecked = PrefsManager.isEventLogEnabled(this)
-        checkEventLog.setOnCheckedChangeListener { _, checked ->
-            EventLog.setEnabled(this, checked)
-            updateEventLogStatus()
-        }
-        findViewById<Button>(R.id.btnShareLog).setOnClickListener { shareEventLog() }
-        findViewById<Button>(R.id.btnClearLog).setOnClickListener {
-            EventLog.clear()
-            Toast.makeText(this, R.string.event_log_cleared, Toast.LENGTH_SHORT).show()
-            // The clear runs on the log's own writer thread; give it a moment
-            // before reading the size back, or the label shows the old one.
-            eventLogStatus.postDelayed({ updateEventLogStatus() }, 300)
-        }
 
         // Language selector
         val currentLocales = AppCompatDelegate.getApplicationLocales()
@@ -141,6 +120,11 @@ class SettingsActivity : AppCompatActivity() {
         // Module settings
         findViewById<Button>(R.id.btnModuleSettings).setOnClickListener {
             startActivity(Intent(this, ModuleSettingsActivity::class.java))
+        }
+
+        // Diagnostics, last on the screen and on one of its own
+        findViewById<Button>(R.id.btnDiagnostics).setOnClickListener {
+            startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
 
         // How it works popup
@@ -188,7 +172,6 @@ class SettingsActivity : AppCompatActivity() {
         // that "it was on and now it is not" is worth saying out loud.
         val a11yLost = !hasA11y && PrefsManager.wasA11yGranted(this)
         if (hasA11y) PrefsManager.setA11yGranted(this, true)
-        updateEventLogStatus()
         // Notifications are the only hard requirement: a foreground service
         // cannot run without one. Return-to-sleep, notification access and the
         // overlay grant each only cost a feature, so none of them gates
@@ -294,40 +277,4 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
-    // ════════ Event log ════════
-
-    private fun updateEventLogStatus() {
-        val kb = (EventLog.sizeBytes() / 1024L).toInt()
-        eventLogStatus.text = when {
-            !PrefsManager.isEventLogEnabled(this) && kb == 0 -> getString(R.string.event_log_off)
-            kb == 0 -> getString(R.string.event_log_empty)
-            else -> getString(R.string.event_log_size, kb)
-        }
-    }
-
-    /**
-     * Hands the trace to whatever the user picks — a messenger, mail, a file
-     * manager. Plain text through a FileProvider uri rather than
-     * `EXTRA_TEXT`: the log outgrows an intent extra within a day, and a file
-     * survives being forwarded.
-     */
-    private fun shareEventLog() {
-        val file = try {
-            EventLog.export(this)
-        } catch (e: Throwable) {
-            null
-        }
-        if (file == null) {
-            Toast.makeText(this, R.string.event_log_nothing, Toast.LENGTH_SHORT).show()
-            return
-        }
-        val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-        val share = Intent(Intent.ACTION_SEND).apply {
-            type = "text/plain"
-            putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, getString(R.string.event_log_share_title))
-            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        }
-        startActivity(Intent.createChooser(share, getString(R.string.event_log_share)))
-    }
 }

@@ -41,6 +41,8 @@
 
     <!-- Diagnostics -->
     <string name="diagnostics_title">Diagnostics</string>
+    <string name="diagnostics_state_title">Current state</string>
+    <string name="diagnostics_state_hint">The same snapshot that heads a shared log, read right now.</string>
     <string name="event_log_enable">Keep an event log</string>
     <string name="event_log_hint">Writes each step of the lock cycle to a file: power press, which wake was used, redraws, going back to sleep, the unlock prompt. Turn it on only while chasing a bug — it costs a file write on every step.</string>
     <string name="event_log_share">Share log</string>

@@ -41,6 +41,8 @@
 
     <!-- Диагностика -->
     <string name="diagnostics_title">Диагностика</string>
+    <string name="diagnostics_state_title">Текущее состояние</string>
+    <string name="diagnostics_state_hint">Тот же снимок, что идёт в начале общего лога, снятый прямо сейчас.</string>
     <string name="event_log_enable">Вести журнал событий</string>
     <string name="event_log_hint">Записывает в файл каждый шаг цикла блокировки: нажатие кнопки, какой способ пробуждения выбран, перерисовки, уход в сон, запрос разблокировки. Включайте только на время поиска бага — каждый шаг стоит записи в файл.</string>
     <string name="event_log_share">Поделиться логом</string>

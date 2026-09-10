@@ -283,67 +283,6 @@
             android:layout_marginBottom="32dp"
             style="@style/Widget.Material3.Button.OutlinedButton" />
 
-        <!-- ═══════ Diagnostics ═══════ -->
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:text="@string/diagnostics_title"
-            android:textSize="18sp"
-            android:textStyle="bold"
-            android:textColor="#000000"
-            android:layout_marginBottom="8dp" />
-
-        <CheckBox
-            android:id="@+id/checkEventLog"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/event_log_enable"
-            android:textSize="16sp"
-            android:textColor="#000000" />
-
-        <TextView
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/event_log_hint"
-            android:textSize="13sp"
-            android:textColor="#666666"
-            android:layout_marginBottom="8dp" />
-
-        <TextView
-            android:id="@+id/eventLogStatus"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:text="@string/event_log_off"
-            android:textSize="14sp"
-            android:textColor="#333333"
-            android:layout_marginBottom="12dp" />
-
-        <LinearLayout
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginBottom="32dp">
-
-            <Button
-                android:id="@+id/btnShareLog"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="48dp"
-                android:text="@string/event_log_share"
-                android:textSize="14sp"
-                android:layout_marginEnd="8dp"
-                style="@style/Widget.Material3.Button.OutlinedButton" />
-
-            <Button
-                android:id="@+id/btnClearLog"
-                android:layout_width="0dp"
-                android:layout_weight="1"
-                android:layout_height="48dp"
-                android:text="@string/event_log_clear"
-                android:textSize="14sp"
-                style="@style/Widget.Material3.Button.OutlinedButton" />
-        </LinearLayout>
-
         <!-- How it works -->
         <TextView
             android:id="@+id/btnHowItWorks"
@@ -370,6 +309,19 @@
             android:background="?attr/selectableItemBackground"
             android:padding="8dp"
             android:layout_marginBottom="32dp" />
+
+        <!-- ═══════ Diagnostics ═══════ -->
+        <!-- Last on the screen and behind its own button: chasing a bug is not
+             part of setting the app up, and the switches for it should be out
+             of the way until they are wanted. -->
+        <Button
+            android:id="@+id/btnDiagnostics"
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:text="@string/diagnostics_title"
+            android:textSize="16sp"
+            android:layout_marginBottom="8dp"
+            style="@style/Widget.Material3.Button.OutlinedButton" />
 
     </LinearLayout>
 </ScrollView>
