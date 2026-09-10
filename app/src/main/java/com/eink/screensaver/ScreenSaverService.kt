@@ -25,6 +25,7 @@ import com.eink.screensaver.data.BookmateFetcher
 import com.eink.screensaver.data.ImageCache
 import com.eink.screensaver.data.NewsFetcher
 import com.eink.screensaver.data.WeatherFetcher
+import com.eink.screensaver.settings.SettingsActivity
 
 class ScreenSaverService : Service() {
 
@@ -292,6 +293,31 @@ class ScreenSaverService : Service() {
         }
         showA11yWarning(!SleepAccessibilityService.isConnected && PrefsManager.wasA11yGranted(this))
 
+        // On a device with the vendor framework, waking without the tag is worse
+        // than not drawing at all. Measured: the panel comes up at full
+        // frontlight, nothing can put the device back to sleep, so it burns
+        // until the system screen timeout — and while the device is interactive
+        // with our window over the keyguard, the keyguard stops listening to the
+        // fingerprint sensor, so the phone cannot even be unlocked by touch.
+        // A dashboard is not worth either. Skip the cycle, keep the phone
+        // asleep and usable, and let the notification say why.
+        //
+        // Only where the tagged wake is supposed to work: on hardware without
+        // the xrz framework the plain wake IS the design, and skipping would
+        // mean the app does nothing at all.
+        if (EinkCompat.isSupported && !canUseVendorWake()) {
+            EventLog.log(
+                EventLog.SRC_SERVICE, "LOCK_SKIP",
+                if (vendorWakeDisabled) "vendor path off for this process → not waking the panel"
+                else "no way back to sleep → not waking the panel"
+            )
+            cancelClockAlarm()
+            // The fetches never touch the screen, so the caches stay warm for
+            // whenever the cycle can run again.
+            triggerDataFetchIfStale()
+            return
+        }
+
         // Before the isActive guard: the screen goes off on every cycle, whether or
         // not the activity survived the last one. Largely vestigial on the HiBreak —
         // the system zeroes the xrz level before this broadcast reaches us, so the
@@ -549,6 +575,15 @@ class ScreenSaverService : Service() {
             return
         }
 
+        // Same bargain as in onScreenOff, and it matters more here: a redraw
+        // every update interval means the frontlight coming up every update
+        // interval, on a device that is in the user's pocket.
+        if (EinkCompat.isSupported && !canUseVendorWake()) {
+            EventLog.log(EventLog.SRC_SERVICE, "TICK_SKIP", "no way back to sleep → no redraw")
+            showA11yWarning(PrefsManager.wasA11yGranted(this))
+            return
+        }
+
         releaseWakeLock()
         val useVendor = canUseVendorWake() && rateLimitAllowsVendorWake()
         EventLog.log(
@@ -753,10 +788,17 @@ class ScreenSaverService : Service() {
     }
 
     private fun buildPersistentNotification(warn: Boolean = a11yWarningShown): Notification {
+        // A warning is only useful if tapping it lands where the fix is; the
+        // ordinary notification keeps opening the notes editor.
         val openIntent = PendingIntent.getActivity(
             this, 0,
-            Intent(this, MainActivity::class.java),
-            PendingIntent.FLAG_IMMUTABLE
+            if (warn) {
+                Intent(this, SettingsActivity::class.java)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+            } else {
+                Intent(this, MainActivity::class.java)
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
         val stopIntent = PendingIntent.getService(
             this, 1,
