@@ -60,12 +60,33 @@ class LockScreenActivity : AppCompatActivity() {
         private const val EINK_FULL_REFRESH_DELAY_MS = 100L
 
         /**
-         * How long after we finish the second clearing pass is due — long
-         * enough for the keyguard to have gone and the screen behind it to have
-         * drawn. Tune it here if the panel still catches the transition instead
-         * of what follows it.
+         * When the clearing passes after we finish are due, in milliseconds
+         * from the moment we hand the screen over.
+         *
+         * The first one is immediate, while our content is still what the panel
+         * holds. The rest are for what comes after us: the keyguard has to go
+         * and the launcher has to draw, and neither happens on a fixed schedule
+         * — an unlock that lands on a cold launcher takes far longer than one
+         * that lands on a warm one. A single pass at 400 ms was catching the
+         * transition itself often enough to leave the ghosting the user sees as
+         * garbage under the launcher, so there is a late one as well. Each costs
+         * one clearing waveform on a screen that is about to be redrawn anyway.
          */
-        private const val EXIT_REFRESH_DELAY_MS = 400L
+        private val EXIT_REFRESH_DELAYS_MS = longArrayOf(400L, 1_200L)
+
+        /**
+         * How long to wait before asking the keyguard a second time. The first
+         * request is refused outright when the activity has not been resumed
+         * yet, which is exactly what happens when the request rides in on the
+         * SCREEN_ON broadcast — that arrives before the window is back.
+         */
+        private const val PROMPT_RETRY_MS = 700L
+
+        /** How many times a refused prompt is re-asked before giving up. */
+        private const val PROMPT_MAX_RETRIES = 2
+
+        /** Ignore repeat interactions this close to a prompt we already sent. */
+        private const val PROMPT_DEBOUNCE_MS = 1_500L
 
         /**
          * Waveform the window is pinned to between full refreshes. REGAL keeps
@@ -568,13 +589,20 @@ class LockScreenActivity : AppCompatActivity() {
      * than the ghosting it cleared.
      */
     private fun clearPanelOnExit() {
-        if (!EinkCompat.isSupported) return
+        if (!EinkCompat.isSupported) {
+            EventLog.log(EventLog.SRC_LOCK, "EXIT_CLEAR_SKIP", "no vendor framework")
+            return
+        }
         lastFullRefreshMs = SystemClock.elapsedRealtime()
         EinkCompat.forceGlobalRefresh(EinkCompat.MODE_CLEAN)
-        Handler(Looper.getMainLooper()).postDelayed(
-            { EinkCompat.forceGlobalRefresh(EinkCompat.MODE_CLEAN) },
-            EXIT_REFRESH_DELAY_MS
-        )
+        EventLog.log(EventLog.SRC_LOCK, "EXIT_CLEAR", "pass=0 delay=0ms")
+        val exitHandler = Handler(Looper.getMainLooper())
+        EXIT_REFRESH_DELAYS_MS.forEachIndexed { index, delay ->
+            exitHandler.postDelayed({
+                EinkCompat.forceGlobalRefresh(EinkCompat.MODE_CLEAN)
+                EventLog.log(EventLog.SRC_LOCK, "EXIT_CLEAR", "pass=${index + 1} delay=${delay}ms")
+            }, delay)
+        }
     }
 
     /** Redraw plus one clearing pass over the whole panel. */
