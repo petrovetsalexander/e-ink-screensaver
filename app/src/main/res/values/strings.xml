@@ -26,8 +26,31 @@
     <string name="notif_access_label">Notification access (optional): %s</string>
     <string name="grant_notif_access">Enable notification access</string>
     <string name="notif_access_hint">Needed to show missed SMS, Telegram messages and calls on the lock screen. Nothing but the sender app and the message count is read. On Android 13 and newer you may first need App info → menu → \"Allow restricted settings\".</string>
+    <string name="why_permission">What is this for?</string>
+    <string name="perm_notifications_title">Notifications</string>
+    <string name="perm_a11y_title">Return to sleep</string>
+    <string name="perm_notif_access_title">Notification access</string>
+    <string name="perm_overlay_title">Draw over other apps</string>
+    <string name="notifications_hint">A foreground service cannot run without a notification of its own, and the service is what watches for the screen going off. This is the one permission the app genuinely needs; the notification itself only carries the Stop button.</string>
     <string name="permissions_granted">permissions granted</string>
     <string name="open_settings_hint">Open Settings → Apps → E-Ink Screensaver</string>
+    <string name="a11y_lost_warning">The accessibility toggle was on and has been cleared by the system. Android does that to sideloaded apps unless App info → menu → \"Allow restricted settings\" has been granted, and after an app update or a low-memory kill. Switch it back on.</string>
+    <string name="overlay_label">Draw over other apps (optional): %s</string>
+    <string name="grant_overlay">Allow drawing over other apps</string>
+    <string name="overlay_hint">No window is drawn. The permission is what lets the service open the lock screen from the background at all; without it Android may block the launch, and then locking the screen leaves the ordinary keyguard up with the frontlight on.</string>
+
+    <!-- Diagnostics -->
+    <string name="diagnostics_title">Diagnostics</string>
+    <string name="event_log_enable">Keep an event log</string>
+    <string name="event_log_hint">Writes each step of the lock cycle to a file: power press, which wake was used, redraws, going back to sleep, the unlock prompt. Turn it on only while chasing a bug — it costs a file write on every step.</string>
+    <string name="event_log_share">Share log</string>
+    <string name="event_log_clear">Clear</string>
+    <string name="event_log_off">Logging is off</string>
+    <string name="event_log_empty">The log is empty</string>
+    <string name="event_log_size">In the log: %1$d KB</string>
+    <string name="event_log_share_title">E-Ink Screensaver event log</string>
+    <string name="event_log_cleared">Log cleared</string>
+    <string name="event_log_nothing">Nothing to share yet</string>
 
     <!-- Clock interval -->
     <string name="clock_interval_title">Clock update interval</string>

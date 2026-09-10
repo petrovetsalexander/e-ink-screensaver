@@ -11,6 +11,15 @@
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Не для окон: самого гранта SYSTEM_ALERT_WINDOW достаточно, чтобы система
+         разрешила сервису запускать LockScreenActivity из фона — это
+         документированное исключение из background-activity-launch. Без него на
+         Android 14 запуск отклоняется как BAL_BLOCK, и когда accessibility-сервис
+         отключён (а он отваливается сам, см. SettingsActivity), экран блокировки
+         не появляется вовсе: горит штатный keyguard с подсветкой. Разрешение
+         опциональное, выдаётся пользователем вручную. -->
+    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+
     <application
         android:name=".EinkApp"
         android:allowBackup="true"

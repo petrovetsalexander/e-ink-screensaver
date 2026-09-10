@@ -26,8 +26,31 @@
     <string name="notif_access_label">Доступ к уведомлениям (необязательно): %s</string>
     <string name="grant_notif_access">Дать доступ к уведомлениям</string>
     <string name="notif_access_hint">Нужен, чтобы показывать пропущенные SMS, сообщения Telegram и звонки на экране блокировки. Читается только приложение-отправитель и количество сообщений. На Android 13 и новее сначала может потребоваться «О приложении» → меню → «Разрешить ограниченные настройки».</string>
+    <string name="why_permission">Зачем это нужно?</string>
+    <string name="perm_notifications_title">Уведомления</string>
+    <string name="perm_a11y_title">Возврат в сон</string>
+    <string name="perm_notif_access_title">Доступ к уведомлениям</string>
+    <string name="perm_overlay_title">Поверх других приложений</string>
+    <string name="notifications_hint">Foreground-сервис не может работать без собственного уведомления, а именно сервис ловит выключение экрана. Это единственное разрешение, без которого приложение не работает; в самом уведомлении есть только кнопка «Остановить».</string>
     <string name="permissions_granted">разрешения предоставлены</string>
     <string name="open_settings_hint">Откройте Настройки → Приложения → E-Ink Скринсейвер</string>
+    <string name="a11y_lost_warning">Галка спец. возможностей была включена, и система её сняла. Android делает это с приложениями, установленными не из магазина, пока не выдано «О приложении» → меню → «Разрешить ограниченные настройки», а также после обновления приложения или его выгрузки из памяти. Включите её снова.</string>
+    <string name="overlay_label">Поверх других приложений (необязательно): %s</string>
+    <string name="grant_overlay">Разрешить показ поверх других приложений</string>
+    <string name="overlay_hint">Никаких окон поверх не рисуется. Само разрешение позволяет сервису запускать экран блокировки из фона; без него Android может заблокировать запуск, и тогда после блокировки остаётся штатный keyguard с включённой подсветкой.</string>
+
+    <!-- Диагностика -->
+    <string name="diagnostics_title">Диагностика</string>
+    <string name="event_log_enable">Вести журнал событий</string>
+    <string name="event_log_hint">Записывает в файл каждый шаг цикла блокировки: нажатие кнопки, какой способ пробуждения выбран, перерисовки, уход в сон, запрос разблокировки. Включайте только на время поиска бага — каждый шаг стоит записи в файл.</string>
+    <string name="event_log_share">Поделиться логом</string>
+    <string name="event_log_clear">Очистить</string>
+    <string name="event_log_off">Журнал выключен</string>
+    <string name="event_log_empty">Журнал пуст</string>
+    <string name="event_log_size">В журнале: %1$d КБ</string>
+    <string name="event_log_share_title">Журнал событий E-Ink Скринсейвера</string>
+    <string name="event_log_cleared">Журнал очищен</string>
+    <string name="event_log_nothing">Пока нечем делиться</string>
 
     <!-- Clock interval -->
     <string name="clock_interval_title">Интервал обновления часов</string>
