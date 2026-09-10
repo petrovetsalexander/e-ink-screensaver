@@ -12,6 +12,8 @@ object PrefsManager {
     private const val KEY_UPDATE_INTERVAL = "update_interval_minutes"
     private const val KEY_SHOW_DATE = "show_date"
     private const val KEY_SAVED_FRONTLIGHT = "saved_frontlight_level"
+    private const val KEY_EVENT_LOG_ENABLED = "event_log_enabled"
+    private const val KEY_A11Y_WAS_GRANTED = "a11y_was_granted"
 
     // Weather
     private const val KEY_WEATHER_CITY = "weather_city"
@@ -96,6 +98,34 @@ object PrefsManager {
 
     fun setShowDate(context: Context, show: Boolean) {
         prefs(context).edit().putBoolean(KEY_SHOW_DATE, show).apply()
+    }
+
+    // ════════ Diagnostics ════════
+
+    /**
+     * Whether [EventLog] writes its trace to disk. Off by default: it is a
+     * debugging aid, and one that costs a file write on every step of the lock
+     * cycle.
+     */
+    fun isEventLogEnabled(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_EVENT_LOG_ENABLED, false)
+
+    fun setEventLogEnabled(context: Context, enabled: Boolean) {
+        prefs(context).edit().putBoolean(KEY_EVENT_LOG_ENABLED, enabled).commit()
+    }
+
+    /**
+     * Whether the accessibility toggle has ever been seen switched on. The
+     * system clears that toggle on its own — after an app update, a low-memory
+     * kill, or because a sideloaded app never had *Allow restricted settings* —
+     * and the app cannot tell that apart from the user switching it off without
+     * remembering what it saw last.
+     */
+    fun wasA11yGranted(context: Context): Boolean =
+        prefs(context).getBoolean(KEY_A11Y_WAS_GRANTED, false)
+
+    fun setA11yGranted(context: Context, granted: Boolean) {
+        prefs(context).edit().putBoolean(KEY_A11Y_WAS_GRANTED, granted).apply()
     }
 
     // ════════ Frontlight ════════
