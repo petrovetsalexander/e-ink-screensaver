@@ -48,14 +48,16 @@ class SleepAccessibilityService : AccessibilityService() {
         fun sleepNow(): Boolean {
             val service = instance
             if (service == null) {
+                EventLog.log(EventLog.SRC_A11Y, "NOT_BOUND", "sleepNow with no connected service")
                 Log.w(TAG, "sleepNow with no connected service")
                 return false
             }
             return try {
                 val ok = service.performGlobalAction(GLOBAL_ACTION_LOCK_SCREEN)
-                Log.d(TAG, "GLOBAL_ACTION_LOCK_SCREEN -> $ok")
+                EventLog.log(EventLog.SRC_A11Y, "LOCK_ACTION", "accepted=$ok")
                 ok
             } catch (e: Throwable) {
+                EventLog.log(EventLog.SRC_A11Y, "LOCK_ACTION_FAIL", e.message ?: "")
                 Log.w(TAG, "GLOBAL_ACTION_LOCK_SCREEN failed: ${e.message}")
                 false
             }
@@ -82,21 +84,40 @@ class SleepAccessibilityService : AccessibilityService() {
     override fun onServiceConnected() {
         super.onServiceConnected()
         instance = this
-        Log.d(TAG, "connected")
+        EventLog.log(EventLog.SRC_A11Y, "CONNECTED")
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {}
 
-    override fun onInterrupt() {}
+    /**
+     * The system calls this when it takes feedback away from the service — a
+     * marker worth having, since it tends to precede the teardown that leaves
+     * the user with a cleared checkbox.
+     */
+    override fun onInterrupt() {
+        EventLog.log(EventLog.SRC_A11Y, "INTERRUPT")
+    }
 
+    /**
+     * The system unbinds us when the user switches the service off — and also
+     * when it decides to switch it off on our behalf, which is the failure the
+     * user sees as "the checkbox cleared itself". Whether the entry in
+     * `enabled_accessibility_services` survived the unbind is the fact that
+     * tells those two apart, so it goes into the line.
+     */
     override fun onUnbind(intent: Intent?): Boolean {
         instance = null
-        Log.d(TAG, "unbound")
+        EventLog.log(
+            EventLog.SRC_A11Y, "UNBOUND",
+            "stillEnabledInSettings=${isEnabledInSettings(this)}"
+        )
         return super.onUnbind(intent)
     }
 
     override fun onDestroy() {
         instance = null
+        EventLog.log(EventLog.SRC_A11Y, "DESTROYED")
         super.onDestroy()
     }
+
 }

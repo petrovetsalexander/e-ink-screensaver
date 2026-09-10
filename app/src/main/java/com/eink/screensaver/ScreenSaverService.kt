@@ -19,6 +19,7 @@ import android.os.IBinder
 import android.os.Looper
 import android.os.PowerManager
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import com.eink.screensaver.data.BookmateFetcher
 import com.eink.screensaver.data.ImageCache
@@ -131,18 +132,27 @@ class ScreenSaverService : Service() {
     private var breakerWindowStartMs = 0L
     private var breakerWakeCount = 0
 
+    /** Whether the notification currently carries the accessibility warning. */
+    private var a11yWarningShown = false
+
     private val screenReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             when (intent.action) {
                 Intent.ACTION_SCREEN_OFF -> {
-                    Log.d(TAG, "══ SCREEN_OFF ══")
+                    EventLog.log(
+                        EventLog.SRC_SERVICE, "SCREEN_OFF",
+                        "lockActive=${LockScreenActivity.isActive} call=${isCallInProgress()}"
+                    )
                     onScreenOff()
                 }
                 Intent.ACTION_SCREEN_ON -> {
-                    Log.d(TAG, "══ SCREEN_ON ══")
+                    EventLog.log(
+                        EventLog.SRC_SERVICE, "SCREEN_ON",
+                        "selfWake=${isSelfWake()} lockActive=${LockScreenActivity.isActive}"
+                    )
                 }
                 Intent.ACTION_USER_PRESENT -> {
-                    Log.d(TAG, "══ USER_PRESENT ══")
+                    EventLog.log(EventLog.SRC_SERVICE, "USER_PRESENT")
                     cancelClockAlarm()
                     cancelDataFetchAlarm()
                     releaseWakeLock()
@@ -170,17 +180,22 @@ class ScreenSaverService : Service() {
         // still off. Put it back before anything else.
         EinkCompat.restoreFrontlight(this)
 
+        EventLog.log(
+            EventLog.SRC_SERVICE, "SERVICE_CREATE",
+            "interactive=${powerManager.isInteractive} a11y=${SleepAccessibilityService.isConnected} " +
+                "eink=${EinkCompat.isSupported} overlay=${Settings.canDrawOverlays(this)}"
+        )
+
         if (!powerManager.isInteractive) {
             Log.d(TAG, "Service started with screen OFF → trigger lockscreen")
             onScreenOff()
         }
-
-        Log.d(TAG, "Service created")
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                EventLog.log(EventLog.SRC_SERVICE, "SERVICE_STOP", "requested by the user")
                 cancelClockAlarm()
                 cancelDataFetchAlarm()
                 sendBroadcast(Intent(LockScreenActivity.ACTION_FINISH).setPackage(packageName))
@@ -190,12 +205,15 @@ class ScreenSaverService : Service() {
                 return START_NOT_STICKY
             }
             ACTION_UPDATE_CLOCK -> {
-                Log.d(TAG, "AlarmManager → update clock")
+                EventLog.log(
+                    EventLog.SRC_SERVICE, "ALARM_CLOCK",
+                    "interactive=${powerManager.isInteractive} lockActive=${LockScreenActivity.isActive}"
+                )
                 onClockAlarmFired()
                 return START_STICKY
             }
             ACTION_FETCH_DATA -> {
-                Log.d(TAG, "AlarmManager → fetch data")
+                EventLog.log(EventLog.SRC_SERVICE, "ALARM_FETCH")
                 onDataFetchAlarmFired()
                 return START_STICKY
             }
@@ -226,7 +244,7 @@ class ScreenSaverService : Service() {
         // another wake is an endless loop — that is exactly what made the phone
         // unusable the first time this was tried.
         if (SystemClock.elapsedRealtime() < selfSleepUntilMs) {
-            Log.d(TAG, "SCREEN_OFF is our own sleep → ignoring")
+            EventLog.log(EventLog.SRC_SERVICE, "SCREEN_OFF_OURS", "latched, ignoring")
             return
         }
 
@@ -251,7 +269,7 @@ class ScreenSaverService : Service() {
         val vendorWake = acquireScreenWakeLock()
 
         if (LockScreenActivity.isActive) {
-            Log.d(TAG, "LockScreenActivity already active, skipping launch")
+            EventLog.log(EventLog.SRC_SERVICE, "LAUNCH_SKIP", "lock screen already active")
             if (vendorWake) scheduleSelfSleep()
             return
         }
@@ -265,7 +283,19 @@ class ScreenSaverService : Service() {
         // Small delay lets the system finish going to sleep before we launch;
         // the activity then turns the screen back on itself.
         handler.postDelayed({
-            startActivity(intent)
+            try {
+                startActivity(intent)
+                EventLog.log(EventLog.SRC_SERVICE, "LAUNCH", "startActivity issued")
+            } catch (e: Throwable) {
+                // The one that matters is SecurityException / BAL_BLOCK: from
+                // Android 10 a background start needs an exemption, and without
+                // the overlay grant there is none. It fails silently in logcat
+                // under the system's tag, never under ours — hence this line.
+                EventLog.log(
+                    EventLog.SRC_SERVICE, "LAUNCH_FAIL",
+                    "${e.javaClass.simpleName}: ${e.message}"
+                )
+            }
         }, LAUNCH_DELAY_MS)
 
         if (vendorWake) scheduleSelfSleep()
@@ -302,7 +332,11 @@ class ScreenSaverService : Service() {
         }
         wakeLock?.acquire(WAKELOCK_TIMEOUT_MS)
         markSelfWake()
-        Log.d(TAG, "WakeLock acquired (${if (useVendor) "vendor, no-backlight tag" else "CPU only"})")
+        EventLog.log(
+            EventLog.SRC_SERVICE, "WAKE",
+            "mode=${if (useVendor) "vendor(no backlight)" else "cpu-only(activity wakes)"} " +
+                "timeout=${WAKELOCK_TIMEOUT_MS}ms"
+        )
         return useVendor
     }
 
@@ -315,7 +349,10 @@ class ScreenSaverService : Service() {
     private fun rateLimitAllowsVendorWake(): Boolean {
         val now = SystemClock.elapsedRealtime()
         if (now - lastVendorWakeMs < MIN_VENDOR_WAKE_INTERVAL_MS) {
-            Log.d(TAG, "vendor wake rate-limited")
+            EventLog.log(
+                EventLog.SRC_SERVICE, "WAKE_RATELIMIT",
+                "${now - lastVendorWakeMs}ms since the last vendor wake"
+            )
             return false
         }
         if (now - breakerWindowStartMs > BREAKER_WINDOW_MS) {
@@ -325,6 +362,10 @@ class ScreenSaverService : Service() {
         breakerWakeCount++
         if (breakerWakeCount > BREAKER_MAX_WAKES) {
             Log.w(TAG, "$breakerWakeCount vendor wakes in a minute → disabling the vendor path")
+            EventLog.log(
+                EventLog.SRC_SERVICE, "BREAKER_TRIP",
+                "$breakerWakeCount vendor wakes in a minute → vendor path off for this process"
+            )
             vendorWakeDisabled = true
             return false
         }
@@ -343,23 +384,38 @@ class ScreenSaverService : Service() {
             // them. A call that started inside the delay counts as the user being
             // here, and it is the one case where sleeping is actively harmful.
             if (!LockScreenActivity.isActive || !keyguardManager.isDeviceLocked || isCallInProgress()) {
-                Log.d(TAG, "self-sleep skipped, the user is here")
+                EventLog.log(
+                    EventLog.SRC_SERVICE, "SLEEP_SKIP",
+                    "lockActive=${LockScreenActivity.isActive} " +
+                        "locked=${keyguardManager.isDeviceLocked} call=${isCallInProgress()}"
+                )
                 return@postDelayed
             }
             selfSleepUntilMs = SystemClock.elapsedRealtime() + SELF_SLEEP_GRACE_MS
             releaseWakeLock()
             if (!SleepAccessibilityService.sleepNow()) {
                 Log.w(TAG, "could not sleep → disabling the vendor path")
+                EventLog.log(
+                    EventLog.SRC_SERVICE, "SLEEP_FAIL",
+                    "lock action refused → vendor path off for this process"
+                )
                 vendorWakeDisabled = true
                 selfSleepUntilMs = 0L
                 return@postDelayed
             }
+            EventLog.log(EventLog.SRC_SERVICE, "SLEEP", "lock action sent")
             // Trust nothing: confirm the device actually went down, or stop using
             // a wake we cannot undo.
             handler.postDelayed({
                 if (powerManager.isInteractive) {
                     Log.w(TAG, "still awake after the lock action → disabling the vendor path")
+                    EventLog.log(
+                        EventLog.SRC_SERVICE, "SLEEP_NOT_TAKEN",
+                        "still interactive 1.5s later → vendor path off for this process"
+                    )
                     vendorWakeDisabled = true
+                } else {
+                    EventLog.log(EventLog.SRC_SERVICE, "SLEEP_OK", "device is down")
                 }
             }, 1_500L)
         }, DRAW_SETTLE_MS)
@@ -455,13 +511,17 @@ class ScreenSaverService : Service() {
         // invisible anyway, and the wake — plus the self-sleep that follows it —
         // would take the screen off the person on the phone.
         if (isCallInProgress()) {
-            Log.d(TAG, "clock alarm during a call → skipping the update")
+            EventLog.log(EventLog.SRC_SERVICE, "CALL_GUARD", "at=clock_alarm, update skipped")
             scheduleClockAlarm()
             return
         }
 
         releaseWakeLock()
         val useVendor = canUseVendorWake() && rateLimitAllowsVendorWake()
+        EventLog.log(
+            EventLog.SRC_SERVICE, "WAKE",
+            "at=clock_alarm mode=${if (useVendor) "vendor(no backlight)" else "plain(backlight up)"}"
+        )
         @Suppress("DEPRECATION")
         wakeLock = powerManager.newWakeLock(
             PowerManager.SCREEN_DIM_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
@@ -590,8 +650,9 @@ class ScreenSaverService : Service() {
                     }
                 }
                 sendBroadcast(Intent(ACTION_DATA_UPDATED).setPackage(packageName))
-                Log.d(TAG, "Data updated → broadcast sent")
+                EventLog.log(EventLog.SRC_SERVICE, "FETCH_DONE")
             } catch (e: Exception) {
+                EventLog.log(EventLog.SRC_SERVICE, "FETCH_FAIL", e.message ?: e.javaClass.simpleName)
                 Log.w(TAG, "Data fetch error: ${e.message}")
             } finally {
                 releaseFetchWakeLock()

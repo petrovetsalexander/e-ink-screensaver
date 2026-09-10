@@ -137,12 +137,31 @@ object EinkCompat {
      * will not overwrite the saved level.
      */
     fun dimFrontlight(context: Context) {
-        if (!isSupported) return
-        if (PrefsManager.getSavedFrontlight(context) != PrefsManager.NO_SAVED_FRONTLIGHT) return
-        val current = getFrontlight() ?: return
-        if (current <= 0) return  // user already had the light off, nothing to restore later
+        if (!isSupported) {
+            EventLog.log(EventLog.SRC_EINK, "DIM_SKIP", "no vendor framework")
+            return
+        }
+        if (PrefsManager.getSavedFrontlight(context) != PrefsManager.NO_SAVED_FRONTLIGHT) {
+            EventLog.log(EventLog.SRC_EINK, "DIM_SKIP", "already dimmed")
+            return
+        }
+        val current = getFrontlight()
+        if (current == null) {
+            EventLog.log(EventLog.SRC_EINK, "DIM_SKIP", "level unreadable")
+            return
+        }
+        if (current <= 0) {
+            // The usual case on the HiBreak: by the time SCREEN_OFF reaches us the
+            // system has already zeroed the vendor level, so there is nothing to
+            // save and nothing to dim.
+            EventLog.log(EventLog.SRC_EINK, "DIM_SKIP", "vendor level already 0")
+            return
+        }
         PrefsManager.setSavedFrontlight(context, current)
-        if (!setFrontlight(0)) {
+        if (setFrontlight(0)) {
+            EventLog.log(EventLog.SRC_EINK, "DIM", "was=$current")
+        } else {
+            EventLog.log(EventLog.SRC_EINK, "DIM_FAIL", "write refused, was=$current")
             PrefsManager.setSavedFrontlight(context, PrefsManager.NO_SAVED_FRONTLIGHT)
         }
     }
@@ -152,7 +171,8 @@ object EinkCompat {
         if (!isSupported) return
         val saved = PrefsManager.getSavedFrontlight(context)
         if (saved == PrefsManager.NO_SAVED_FRONTLIGHT) return
-        setFrontlight(saved)
+        val ok = setFrontlight(saved)
+        EventLog.log(EventLog.SRC_EINK, if (ok) "RESTORE" else "RESTORE_FAIL", "level=$saved")
         PrefsManager.setSavedFrontlight(context, PrefsManager.NO_SAVED_FRONTLIGHT)
     }
 

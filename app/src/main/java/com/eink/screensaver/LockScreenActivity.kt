@@ -150,6 +150,15 @@ class LockScreenActivity : AppCompatActivity() {
      */
     private var wasBackgrounded = false
 
+    /**
+     * A wake we believe the user caused arrived while the activity was not in a
+     * state to ask the keyguard anything. Cleared by whichever of [onResume] or
+     * [onWindowFocusChanged] gets there first.
+     */
+    private var unlockPromptPending = false
+    private var promptRetries = 0
+    private var lastPromptMs = 0L
+
     private val unlockPollRunnable = object : Runnable {
         override fun run() {
             if (!keyguardManager.isDeviceLocked) {
@@ -178,11 +187,14 @@ class LockScreenActivity : AppCompatActivity() {
                     finish()
                 }
                 Intent.ACTION_SCREEN_OFF -> {
-                    Log.d(TAG, "SCREEN_OFF → stop polling")
+                    EventLog.log(EventLog.SRC_LOCK, "SCREEN_OFF", "polling stopped")
                     stopUnlockPolling()
                 }
                 Intent.ACTION_SCREEN_ON -> {
-                    Log.d(TAG, "SCREEN_ON → start polling, update display")
+                    EventLog.log(
+                        EventLog.SRC_LOCK, "SCREEN_ON",
+                        "selfWake=${ScreenSaverService.isSelfWake()}"
+                    )
                     refreshDisplay()
                     startUnlockPolling()
                     promptForUnlockIfUserWoke()
@@ -311,7 +323,12 @@ class LockScreenActivity : AppCompatActivity() {
         // screen before the lock, and no partial waveform gets rid of that.
         fullRefresh()
 
-        Log.d(TAG, "Activity created, display drawn")
+        EventLog.log(
+            EventLog.SRC_LOCK, "CREATE",
+            "preview=$isPreview vendorWake=${ScreenSaverService.canUseVendorWake()} " +
+                "turnScreenOn=${!isPreview && !ScreenSaverService.canUseVendorWake()} " +
+                "locked=${keyguardManager.isKeyguardLocked}"
+        )
     }
 
     override fun onNewIntent(intent: Intent?) {
@@ -334,11 +351,16 @@ class LockScreenActivity : AppCompatActivity() {
         isActive = true
 
         if (!keyguardManager.isDeviceLocked) {
-            Log.d(TAG, "onResume: device already unlocked → finish")
+            EventLog.log(EventLog.SRC_LOCK, "RESUME", "device already unlocked → finish")
             vibrateConfirmation()
             finishOnUnlock()
             return
         }
+
+        EventLog.log(
+            EventLog.SRC_LOCK, "RESUME",
+            "backgrounded=$wasBackgrounded promptPending=$unlockPromptPending"
+        )
 
         if (wasBackgrounded) {
             wasBackgrounded = false
@@ -355,6 +377,7 @@ class LockScreenActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        EventLog.log(EventLog.SRC_LOCK, "STOP", "preview=$isPreview")
         stopUnlockPolling()
         if (!isPreview) wasBackgrounded = true
         // The activity is singleTask, so a preview left in the background would be
@@ -368,7 +391,7 @@ class LockScreenActivity : AppCompatActivity() {
         if (!isPreview) isActive = false
         handler.removeCallbacksAndMessages(null)
         unregisterReceivers()
-        Log.d(TAG, "Activity destroyed")
+        EventLog.log(EventLog.SRC_LOCK, "DESTROY", "preview=$isPreview")
         super.onDestroy()
     }
 
@@ -427,6 +450,7 @@ class LockScreenActivity : AppCompatActivity() {
     // ════════ Finish ════════
 
     private fun finishOnUnlock() {
+        EventLog.log(EventLog.SRC_LOCK, "UNLOCK", "clearing the panel and finishing")
         stopUnlockPolling()
         // The poll is the reliable unlock signal here — USER_PRESENT proved flaky —
         // so restore the frontlight from this path too, not just from the service.
@@ -516,9 +540,10 @@ class LockScreenActivity : AppCompatActivity() {
     private fun refreshDisplay() {
         val since = SystemClock.elapsedRealtime() - lastFullRefreshMs
         if (since >= FULL_REFRESH_INTERVAL_MS) {
-            Log.d(TAG, "full refresh due (${since / 60_000} min since the last one)")
+            EventLog.log(EventLog.SRC_LOCK, "DRAW", "mode=full due=${since / 60_000}min")
             fullRefresh()
         } else {
+            EventLog.log(EventLog.SRC_LOCK, "DRAW", "mode=partial since=${since / 60_000}min")
             updateDisplay()
         }
     }
