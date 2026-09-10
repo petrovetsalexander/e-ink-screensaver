@@ -180,6 +180,9 @@ class LockScreenActivity : AppCompatActivity() {
     private var promptRetries = 0
     private var lastPromptMs = 0L
 
+    /** Set by the first unlock path to get there; see [finishOnUnlock]. */
+    private var unlockHandled = false
+
     private val unlockPollRunnable = object : Runnable {
         override fun run() {
             if (!keyguardManager.isDeviceLocked) {
@@ -575,6 +578,15 @@ class LockScreenActivity : AppCompatActivity() {
     // ════════ Finish ════════
 
     private fun finishOnUnlock() {
+        // Three things race to notice an unlock — the poll, USER_PRESENT and
+        // onResume — and finish() does not stop the other two from arriving, so
+        // without this the panel got both sets of clearing passes: six flashes
+        // instead of three, which is what the event log showed.
+        if (unlockHandled) {
+            EventLog.log(EventLog.SRC_LOCK, "UNLOCK_DUP", "already finishing, ignoring")
+            return
+        }
+        unlockHandled = true
         EventLog.log(EventLog.SRC_LOCK, "UNLOCK", "clearing the panel and finishing")
         stopUnlockPolling()
         // The poll is the reliable unlock signal here — USER_PRESENT proved flaky —
