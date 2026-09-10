@@ -156,6 +156,7 @@
     <string name="notification_text">Часы на заблокированном экране</string>
     <string name="notification_clock_title">E-Ink Часы</string>
     <string name="notification_stop">Остановить</string>
+    <string name="notification_a11y_warning">Возврат в сон отключён — после блокировки подсветка останется гореть. Включите сервис спец. возможностей в настройках.</string>
 
     <!-- Weather display -->
     <string name="weather_precip_mm">%.1f мм</string>

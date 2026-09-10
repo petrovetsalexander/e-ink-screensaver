@@ -156,6 +156,7 @@
     <string name="notification_text">Clock on lock screen</string>
     <string name="notification_clock_title">E-Ink Clock</string>
     <string name="notification_stop">Stop</string>
+    <string name="notification_a11y_warning">Return to sleep is off — the frontlight will stay on after locking. Switch the accessibility service back on in settings.</string>
 
     <!-- Weather display -->
     <string name="weather_precip_mm">%.1f mm</string>

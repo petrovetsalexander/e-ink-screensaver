@@ -254,10 +254,43 @@ class ScreenSaverService : Service() {
         // a ringing or connected call is the wrong thing every time. The alarm
         // is still rescheduled so the cycle resumes on its own afterwards.
         if (isCallInProgress()) {
-            Log.d(TAG, "SCREEN_OFF during a call → leaving the screen alone")
+            EventLog.log(EventLog.SRC_SERVICE, "CALL_GUARD", "at=screen_off, screen left alone")
             scheduleClockAlarm()
             return
         }
+
+        // The whole shape of the cycle that follows is decided here, and when it
+        // goes wrong it goes wrong quietly: with the accessibility service gone
+        // the vendor wake is unavailable, the device wakes normally with the
+        // frontlight up, and nothing puts it back to sleep before the system
+        // screen timeout. Recorded on every lock so the trace says which path
+        // ran rather than leaving it to be inferred.
+        val a11yEnabled = SleepAccessibilityService.isEnabledInSettings(this)
+        EventLog.log(
+            EventLog.SRC_SERVICE, "PATH",
+            "vendorWake=${canUseVendorWake()} a11yBound=${SleepAccessibilityService.isConnected} " +
+                "a11yEnabled=$a11yEnabled eink=${EinkCompat.isSupported} " +
+                "breakerOff=$vendorWakeDisabled overlay=${Settings.canDrawOverlays(this)}"
+        )
+        if (!SleepAccessibilityService.isConnected) {
+            EventLog.log(
+                EventLog.SRC_SERVICE, "A11Y_MISSING",
+                if (a11yEnabled) "enabled in settings but not bound (crashed?)"
+                else "switched off in system settings → backlight will stay on"
+            )
+        }
+        // The system clears the accessibility toggle by itself; remembering that
+        // it was once on is what lets the app say so instead of leaving the user
+        // to wonder why the frontlight came back.
+        if (a11yEnabled) {
+            PrefsManager.setA11yGranted(this, true)
+        } else if (PrefsManager.wasA11yGranted(this)) {
+            EventLog.log(
+                EventLog.SRC_SERVICE, "A11Y_LOST",
+                "the toggle was on before and the system has cleared it"
+            )
+        }
+        showA11yWarning(!SleepAccessibilityService.isConnected && PrefsManager.wasA11yGranted(this))
 
         // Before the isActive guard: the screen goes off on every cycle, whether or
         // not the activity survived the last one. Largely vestigial on the HiBreak —
@@ -701,7 +734,25 @@ class ScreenSaverService : Service() {
         notificationManager.deleteNotificationChannel("eink_lockscreen_channel")
     }
 
-    private fun buildPersistentNotification(): Notification {
+    /**
+     * The one place the user is guaranteed to see: the service's own
+     * notification. When the accessibility toggle has gone away the app carries
+     * on, but every lock from then on wakes the panel with the frontlight up and
+     * leaves it on until the system screen timeout — silently, and the user's
+     * only clue is a phone that is suddenly bright in a dark room. Saying it
+     * here means the fix is one tap away.
+     */
+    private fun showA11yWarning(warn: Boolean) {
+        if (warn == a11yWarningShown) return
+        a11yWarningShown = warn
+        try {
+            notificationManager.notify(NOTIFICATION_ID, buildPersistentNotification(warn))
+        } catch (e: Throwable) {
+            Log.w(TAG, "could not update the notification: ${e.message}")
+        }
+    }
+
+    private fun buildPersistentNotification(warn: Boolean = a11yWarningShown): Notification {
         val openIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
@@ -712,9 +763,15 @@ class ScreenSaverService : Service() {
             Intent(this, ScreenSaverService::class.java).apply { action = ACTION_STOP },
             PendingIntent.FLAG_IMMUTABLE
         )
+        val text = if (warn) {
+            getString(R.string.notification_a11y_warning)
+        } else {
+            getString(R.string.notification_text)
+        }
         return Notification.Builder(this, CHANNEL_ID)
             .setContentTitle(getString(R.string.notification_title))
-            .setContentText(getString(R.string.notification_text))
+            .setContentText(text)
+            .setStyle(Notification.BigTextStyle().bigText(text))
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentIntent(openIntent)
             .addAction(Notification.Action.Builder(null, getString(R.string.notification_stop), stopIntent).build())
