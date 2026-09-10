@@ -390,6 +390,10 @@ class LockScreenActivity : AppCompatActivity() {
             updateDisplay()
         }
         startUnlockPolling()
+        // The activity is resumed now, which is the state the keyguard demands
+        // before it will take a dismiss request; anything the SCREEN_ON handler
+        // could not ask for is asked for here.
+        if (unlockPromptPending) requestUnlockPrompt("resume")
     }
 
     override fun onPause() {
@@ -436,23 +440,123 @@ class LockScreenActivity : AppCompatActivity() {
      * Only for wakes the user caused: the service marks its own redraw wakes,
      * which arrive as an identical SCREEN_ON every update interval and must not
      * put a prompt in front of nobody.
+     *
+     * The request itself cannot be made from here, though. It arrives on the
+     * SCREEN_ON broadcast, which the system sends before our window is back —
+     * and `requestDismissKeyguard` from an activity that is not resumed is
+     * refused, silently as far as the app is concerned. That is the whole of
+     * the "sometimes there is no pattern, but the fingerprint sensor still
+     * unlocks": the sensor is the keyguard's own, it never needed us. So this
+     * only records the intent, and [requestUnlockPrompt] is driven from the
+     * lifecycle instead.
      */
     private fun promptForUnlockIfUserWoke() {
         if (ScreenSaverService.isSelfWake()) {
-            Log.d(TAG, "SCREEN_ON came from our own redraw → no prompt")
+            EventLog.log(EventLog.SRC_LOCK, "PROMPT_SKIP", "SCREEN_ON was our own redraw")
             return
         }
+        unlockPromptPending = true
+        promptRetries = 0
+        requestUnlockPrompt("screen_on")
+    }
+
+    /**
+     * Ask the keyguard to put its unlock prompt up, if it is in a position to
+     * and we are in a position to ask.
+     *
+     * The callback is the point of the exercise: `onDismissError` is what a
+     * refusal looks like, and it is the only way to find out that the ask went
+     * nowhere — the call itself is void and throws nothing. A refusal is
+     * re-tried a couple of times, which covers the window between the screen
+     * coming on and this activity actually being resumed.
+     */
+    private fun requestUnlockPrompt(source: String) {
+        if (isPreview) return
         // isKeyguardLocked, not isDeviceLocked: the latter is false whenever the
         // keyguard is not secure or the device is in a trusted state, and the
         // prompt is exactly what is wanted in those cases too. (The unlock poll
         // keeps using isDeviceLocked — it answers a different question.)
-        if (!keyguardManager.isKeyguardLocked) return
+        if (!keyguardManager.isKeyguardLocked) {
+            unlockPromptPending = false
+            return
+        }
+        val now = SystemClock.elapsedRealtime()
+        // One wake reaches this three times over — the broadcast, then onResume,
+        // then the window regaining focus — and the keyguard only needs asking
+        // once. Retries are exempt: they exist precisely to ask again.
+        if (!source.startsWith("retry") && now - lastPromptMs < PROMPT_DEBOUNCE_MS) return
+        if (source == "interaction") {
+            // A deliberate touch starts a fresh attempt: retries spent on the
+            // wake must not be what stops the user getting a prompt now.
+            promptRetries = 0
+        }
+
+        lastPromptMs = now
         try {
-            keyguardManager.requestDismissKeyguard(this, null)
-            Log.d(TAG, "asked the keyguard for its unlock prompt")
+            keyguardManager.requestDismissKeyguard(
+                this,
+                object : KeyguardManager.KeyguardDismissCallback() {
+                    override fun onDismissError() {
+                        EventLog.log(
+                            EventLog.SRC_LOCK, "PROMPT_REFUSED",
+                            "src=$source retry=$promptRetries"
+                        )
+                        retryUnlockPrompt(source)
+                    }
+
+                    override fun onDismissSucceeded() {
+                        unlockPromptPending = false
+                        EventLog.log(EventLog.SRC_LOCK, "PROMPT_DISMISSED", "src=$source")
+                    }
+
+                    override fun onDismissCancelled() {
+                        // The keyguard did answer, which is all the pending flag
+                        // was waiting for; the user backing out of the bouncer
+                        // is not something to re-ask about.
+                        unlockPromptPending = false
+                        EventLog.log(EventLog.SRC_LOCK, "PROMPT_CANCELLED", "src=$source")
+                    }
+                }
+            )
+            EventLog.log(
+                EventLog.SRC_LOCK, "PROMPT",
+                "src=$source focus=${hasWindowFocus()} secure=${keyguardManager.isKeyguardSecure}"
+            )
         } catch (e: Throwable) {
+            EventLog.log(EventLog.SRC_LOCK, "PROMPT_FAIL", "${e.javaClass.simpleName}: ${e.message}")
             Log.w(TAG, "requestDismissKeyguard failed: ${e.message}")
         }
+    }
+
+    private fun retryUnlockPrompt(source: String) {
+        if (promptRetries >= PROMPT_MAX_RETRIES) {
+            EventLog.log(EventLog.SRC_LOCK, "PROMPT_GIVE_UP", "src=$source")
+            return
+        }
+        promptRetries++
+        handler.postDelayed({
+            if (!isFinishing && keyguardManager.isKeyguardLocked) {
+                requestUnlockPrompt("retry$promptRetries")
+            }
+        }, PROMPT_RETRY_MS)
+    }
+
+    /**
+     * Any touch or key event that reaches us means the user is in front of the
+     * panel with no way in — the prompt either never came up or was dismissed.
+     * Asking again is the manual way out, and it costs nothing when the
+     * keyguard is already showing its own UI, because then it is not us
+     * receiving the events.
+     */
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        if (isPreview) return
+        requestUnlockPrompt("interaction")
+    }
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && unlockPromptPending) requestUnlockPrompt("focus")
     }
 
     // ════════ Unlock polling ════════
