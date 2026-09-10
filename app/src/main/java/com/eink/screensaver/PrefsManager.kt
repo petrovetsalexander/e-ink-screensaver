@@ -38,6 +38,11 @@ object PrefsManager {
     private const val KEY_NOTES_JSON = "notes_json"
     private const val KEY_STICKERS_JSON = "notes_stickers_json"
 
+    // Notification counts
+    private const val KEY_NOTIF_SMS = "notif_count_sms"
+    private const val KEY_NOTIF_TELEGRAM = "notif_count_telegram"
+    private const val KEY_NOTIF_MISSED_CALLS = "notif_count_missed_calls"
+
     // Bookmate
     private const val KEY_BOOKMATE_USER_ID = "bookmate_user_id"
     private const val KEY_BOOKMATE_CACHE_JSON = "bookmate_cache_json"
@@ -251,6 +256,30 @@ object PrefsManager {
 
     fun setStickersJson(context: Context, json: String) {
         prefs(context).edit().putString(KEY_STICKERS_JSON, json).apply()
+    }
+
+    // ════════ Notification counts ════════
+
+    /**
+     * Written by [NotificationListener] whenever a notification is posted or
+     * dismissed, read by the lock screen on its next redraw. Cached rather than
+     * queried live so the corner still shows something when the listener is not
+     * bound — after a reboot, say, before the system has got round to it.
+     */
+    fun getNotificationCounts(context: Context): NotificationCounts = prefs(context).let {
+        NotificationCounts(
+            it.getInt(KEY_NOTIF_SMS, 0),
+            it.getInt(KEY_NOTIF_TELEGRAM, 0),
+            it.getInt(KEY_NOTIF_MISSED_CALLS, 0)
+        )
+    }
+
+    fun setNotificationCounts(context: Context, counts: NotificationCounts) {
+        prefs(context).edit()
+            .putInt(KEY_NOTIF_SMS, counts.sms)
+            .putInt(KEY_NOTIF_TELEGRAM, counts.telegram)
+            .putInt(KEY_NOTIF_MISSED_CALLS, counts.missedCalls)
+            .apply()
     }
 
     // ════════ Bookmate ════════

@@ -232,6 +232,87 @@
 
     </LinearLayout>
 
+    <!-- Missed SMS, Telegram and calls, in the corner opposite the battery and
+         on the same overlay principle: each glyph appears only when its count
+         is non-zero, and the row disappears entirely when nothing is waiting. -->
+    <LinearLayout
+        android:id="@+id/notificationsRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|start"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="9dp"
+        android:paddingStart="20dp"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/notifSmsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:text=""
+            android:textSize="12sp"
+            android:textColor="#000000"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/notifTelegramText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="12dp"
+            android:text=""
+            android:textSize="12sp"
+            android:textColor="#000000"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/notifCallsText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textSize="12sp"
+            android:textColor="#000000"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false"
+            android:visibility="gone" />
+    </LinearLayout>
+
+    <!-- Battery: an overlay on the root frame rather than a row inside
+         mainContainer, so it keeps the same corner whatever the module order
+         and the clock position are. It sits in the strip that mainContainer's
+         32dp top padding leaves empty. -->
+    <LinearLayout
+        android:id="@+id/batteryRow"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:orientation="horizontal"
+        android:gravity="center_vertical"
+        android:paddingTop="9dp"
+        android:paddingEnd="20dp">
+
+        <com.eink.screensaver.BatteryIndicatorView
+            android:id="@+id/batteryIcon"
+            android:layout_width="22dp"
+            android:layout_height="11dp" />
+
+        <TextView
+            android:id="@+id/batteryText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="5dp"
+            android:text=""
+            android:textSize="12sp"
+            android:textColor="#000000"
+            android:fontFamily="sans-serif"
+            android:includeFontPadding="false" />
+    </LinearLayout>
+
     <!-- Unlock hint (fixed at bottom, not affected by anti-ghosting) -->
     <TextView
         android:id="@+id/unlockHintText"

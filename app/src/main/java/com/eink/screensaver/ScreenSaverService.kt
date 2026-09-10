@@ -12,6 +12,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.media.AudioManager
 import android.os.Build
 import android.os.Handler
 import android.os.IBinder
@@ -118,6 +119,7 @@ class ScreenSaverService : Service() {
     private lateinit var keyguardManager: KeyguardManager
     private lateinit var notificationManager: NotificationManager
     private lateinit var alarmManager: AlarmManager
+    private lateinit var audioManager: AudioManager
     private val handler = Handler(Looper.getMainLooper())
     private var wakeLock: PowerManager.WakeLock? = null
     private var fetchWakeLock: PowerManager.WakeLock? = null
@@ -158,6 +160,7 @@ class ScreenSaverService : Service() {
         keyguardManager = getSystemService(KEYGUARD_SERVICE) as KeyguardManager
         notificationManager = getSystemService(NotificationManager::class.java)
         alarmManager = getSystemService(ALARM_SERVICE) as AlarmManager
+        audioManager = getSystemService(AUDIO_SERVICE) as AudioManager
 
         createNotificationChannels()
         startForeground(NOTIFICATION_ID, buildPersistentNotification())
@@ -224,6 +227,17 @@ class ScreenSaverService : Service() {
         // unusable the first time this was tried.
         if (SystemClock.elapsedRealtime() < selfSleepUntilMs) {
             Log.d(TAG, "SCREEN_OFF is our own sleep → ignoring")
+            return
+        }
+
+        // A call owns the screen. The proximity sensor does not broadcast
+        // SCREEN_OFF, but the power button and the screen timeout do, and
+        // answering either by waking the panel and drawing a lock screen over
+        // a ringing or connected call is the wrong thing every time. The alarm
+        // is still rescheduled so the cycle resumes on its own afterwards.
+        if (isCallInProgress()) {
+            Log.d(TAG, "SCREEN_OFF during a call → leaving the screen alone")
+            scheduleClockAlarm()
             return
         }
 
@@ -325,8 +339,10 @@ class ScreenSaverService : Service() {
      */
     private fun scheduleSelfSleep() {
         handler.postDelayed({
-            // The user may have woken the phone in the meantime — never sleep on them.
-            if (!LockScreenActivity.isActive || !keyguardManager.isDeviceLocked) {
+            // The user may have woken the phone in the meantime — never sleep on
+            // them. A call that started inside the delay counts as the user being
+            // here, and it is the one case where sleeping is actively harmful.
+            if (!LockScreenActivity.isActive || !keyguardManager.isDeviceLocked || isCallInProgress()) {
                 Log.d(TAG, "self-sleep skipped, the user is here")
                 return@postDelayed
             }
@@ -347,6 +363,26 @@ class ScreenSaverService : Service() {
                 }
             }, 1_500L)
         }, DRAW_SETTLE_MS)
+    }
+
+    /**
+     * Whether a call — cellular or VoIP — has the audio path right now.
+     *
+     * Read off the audio mode rather than `TelephonyManager.getCallState`,
+     * which needs READ_PHONE_STATE from Android 12 on and would still miss a
+     * Telegram call. MODE_RINGTONE covers the ringing that has not been
+     * answered yet, which is the moment it matters most.
+     */
+    private fun isCallInProgress(): Boolean = try {
+        when (audioManager.mode) {
+            AudioManager.MODE_RINGTONE,
+            AudioManager.MODE_IN_CALL,
+            AudioManager.MODE_IN_COMMUNICATION -> true
+            else -> false
+        }
+    } catch (e: Throwable) {
+        Log.w(TAG, "could not read the audio mode: ${e.message}")
+        false
     }
 
     // ════════ WakeLock ════════
@@ -414,6 +450,16 @@ class ScreenSaverService : Service() {
 
     @SuppressLint("WakelockTimeout")
     private fun onClockAlarmFired() {
+        // Never wake the panel out from under a call. The lock screen is in the
+        // background behind the in-call UI at this point; redrawing it would be
+        // invisible anyway, and the wake — plus the self-sleep that follows it —
+        // would take the screen off the person on the phone.
+        if (isCallInProgress()) {
+            Log.d(TAG, "clock alarm during a call → skipping the update")
+            scheduleClockAlarm()
+            return
+        }
+
         releaseWakeLock()
         val useVendor = canUseVendorWake() && rateLimitAllowsVendorWake()
         @Suppress("DEPRECATION")

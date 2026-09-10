@@ -23,6 +23,9 @@
     <string name="a11y_label">Return to sleep (optional): %s</string>
     <string name="grant_a11y">Enable in Accessibility</string>
     <string name="a11y_hint">Without this the frontlight flashes for a moment each time the screen locks. On Android 13 and newer you may first need App info → menu → \"Allow restricted settings\".</string>
+    <string name="notif_access_label">Notification access (optional): %s</string>
+    <string name="grant_notif_access">Enable notification access</string>
+    <string name="notif_access_hint">Needed to show missed SMS, Telegram messages and calls on the lock screen. Nothing but the sender app and the message count is read. On Android 13 and newer you may first need App info → menu → \"Allow restricted settings\".</string>
     <string name="permissions_granted">permissions granted</string>
     <string name="open_settings_hint">Open Settings → Apps → E-Ink Screensaver</string>
 

@@ -26,6 +26,16 @@ No tests, no lint configuration, no CI — there is no "run a single test" comma
 adb logcat -s ScreenSaverSvc LockScreenAct EinkCompat NetworkFetcher WeatherFetcher NewsFetcher BookmateFetcher ImageCache
 ```
 
+**After every `adb install -r`, re-enable the accessibility service.** The reinstall kills it, `AccessibilityManagerService` files it under `Crashed services:` and does not rebind — `dumpsys accessibility` then shows `Bound services:{}` with ours still listed under `Enabled services`. The app degrades exactly as designed (`canUseVendorWake()` false → CPU-only wake lock → the activity wakes the screen itself), except that on this device the fallback does not work either: `appops` shows both `SYSTEM_ALERT_WINDOW` and `TURN_SCREEN_ON` rejected for this package, so the screen never comes on and `startActivity` from the service is refused with `Background activity launch blocked … (BAL_BLOCK)`. The symptom is a power press that turns the backlight off and shows nothing at all, with no error in the app's own log — the give-away is `WakeLock acquired (CPU only)` followed by silence from `LockScreenAct`. Toggling the service in Settings fixes it; over adb:
+
+```bash
+adb shell settings put secure enabled_accessibility_services '""'
+adb shell settings put secure enabled_accessibility_services com.eink.screensaver/com.eink.screensaver.SleepAccessibilityService
+adb shell settings put secure accessibility_enabled 1
+```
+
+The durable fix, if this gets annoying, is `SYSTEM_ALERT_WINDOW` — a granted overlay permission is a documented BAL exemption and would make the launch work with the accessibility service in any state.
+
 ## Project Overview
 
 E-Ink Screensaver is an Android app (Kotlin, minSdk 28, targetSdk/compileSdk 34) that draws an information dashboard — clock, weather, news, sticky notes, currently-reading book — over the lock screen of an e-ink device, then lets the panel go to sleep holding that image at zero power.
@@ -40,12 +50,23 @@ Package: `com.eink.screensaver`. Dependencies are only `core-ktx`, `appcompat`, 
 
 1. `ACTION_SCREEN_OFF` arrives → `onScreenOff()` acquires a `SCREEN_DIM_WAKE_LOCK or ACQUIRE_CAUSES_WAKEUP` (5 s), waits 200 ms for the screen to actually be on, then `startActivity(LockScreenActivity)` directly.
 2. `LockScreenActivity` sets `window.screenBrightness = 0.0f` **before** anything else (so the e-ink frontlight never flashes), `setShowWhenLocked` + `setTurnScreenOn`, and immersive fullscreen.
-3. The activity flashes the decor view black for 100 ms, then white, then draws — this forces a full GC16 panel refresh that clears ghosting, replacing the older random-offset anti-ghosting trick.
+3. On launch the activity does one full panel refresh — `forceGlobalRefresh(MODE_CLEAN)` on the vendor path, a 100 ms black-then-white decor flash without it — which clears the ghosting left by whatever was on screen before the lock. Every redraw after that is partial; see the refresh schedule below.
 4. The wake lock expires, the device sleeps, the e-ink panel retains the image.
 5. Two `AlarmManager` alarms wake the service periodically (see below).
 6. Unlock is detected by polling `KeyguardManager.isDeviceLocked` every 1000 ms, and only while the screen is on (`SCREEN_ON`/`SCREEN_OFF` start/stop the poll). Broadcast-based detection proved unreliable. On unlock: short vibration, then finish.
 
 **The app does not use `fullScreenIntent`** (hence the old branch name `no_fullScreenIntent`). The service launches the activity from the background directly, relying on the wake lock. Every trace of the earlier approach is gone — the permission, the second notification channel, the cancel calls and the settings gate — so `POST_NOTIFICATIONS` is the only hard requirement, and only because a foreground service cannot run without a notification.
+
+
+### Incoming calls
+
+The lock screen has no call handling of its own — the dialer's full-screen intent simply launches over it, and `LockScreenActivity` is `showWhenLocked` + `singleTask` on its own `taskAffinity`, so it is stopped, not destroyed: `isActive` stays true, the receivers stay registered, and when the call ends the activity comes back through `onResume`. `wasBackgrounded`, set in `onStop`, promotes that redraw to a `fullRefresh()` — the in-call UI's pixels are still on the panel and no partial waveform clears them.
+
+What the service must not do during a call is anything involving the screen, and three guards say so, all keyed off `isCallInProgress()` (the audio mode: RINGTONE / IN_CALL / IN_COMMUNICATION, chosen over `TelephonyManager.getCallState` because that needs READ_PHONE_STATE from Android 12 and still misses a Telegram call):
+
+- `onScreenOff()` returns early — the proximity sensor does not broadcast SCREEN_OFF, but the power button and the screen timeout do, and drawing a lock screen over a ringing call is wrong every time. The clock alarm is still rescheduled so the cycle resumes afterwards.
+- `onClockAlarmFired()` skips the wake and the redraw and only reschedules. Without this the tagged vendor wake fires under the in-call UI and the self-sleep behind it takes the screen off whoever is on the phone.
+- The `scheduleSelfSleep()` runnable treats a call started inside its delay as the user being present.
 
 ### The two alarms
 
@@ -63,6 +84,10 @@ The lock screen is a vertical stack of five modules — `clock`, `weather`, `new
 `activity_lockscreen.xml` declares the sections in default order; on every `updateDisplay()` `reorderModules()` removes and re-adds them into `mainContainer` following the saved order, then each module's block decides `VISIBLE`/`GONE` from its toggle plus whether its cache holds usable data. Sticker cards and their rows are built programmatically (`buildStickerView`), as is the reorderable list in `ModuleSettingsActivity`.
 
 **Adding or renaming a module touches all of:** `PrefsManager` (toggle + font-size keys, `DEFAULT_MODULES_ORDER`), a section in `activity_lockscreen.xml`, `LockScreenActivity.getModuleView()` and the corresponding block in `updateDisplay()`, the three `when` blocks in `ModuleSettingsActivity` (`isModuleEnabled` / `setModuleEnabled` / `moduleDisplayName`), a `<activity>` entry in the manifest for its settings screen, and strings in **both** `values/` and `values-ru/`.
+
+The battery indicator is **not** a module: `batteryRow` is an overlay child of the root `FrameLayout`, anchored `top|end` inside the strip that `mainContainer`'s 32dp top padding leaves empty, so the module order and the clock position never move it. `BatteryIndicatorView` draws the gauge on a canvas; `updateBattery()` reads the sticky `ACTION_BATTERY_CHANGED` on each `updateDisplay()`, which is what ties it to the clock's update interval. It has no enable toggle.
+
+Neither is the missed-notification corner: `notificationsRow` is the mirror-image overlay at `top|start`, one glyph and a count each for SMS, Telegram and missed calls, each hidden at zero and the row hidden when all three are. The counting is `NotificationListener`, a `NotificationListenerService` that classifies by posting package and `Notification.CATEGORY_MISSED_CALL` — the default SMS package from `Telephony.Sms.getDefaultSmsPackage` plus a hardcoded fallback set, anything under `org.telegram` plus Telegram X, and `com.android.server.telecom`, which is what posts missed calls on AOSP. Group summaries and ongoing notifications are skipped; a bundled chat is weighted by `EXTRA_MESSAGES.size`, else `Notification.number`, else 1. It writes the three counts into prefs on every post and removal and **does not broadcast** — a notification is not worth a panel refresh, so the number is picked up by the next clock tick. `NotificationListener.snapshot()` recounts from the live service when it is bound and falls back to the prefs cache when it is not. Notification access is a separate user grant (`Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS`, gated in `SettingsActivity`), and on Android 13+ a sideloaded app hits the same *Allow restricted settings* wall as the accessibility service.
 
 ### Data layer (`data/`)
 
@@ -157,7 +182,8 @@ So the device's own idle floor (~5 mA) is 97% of the drain and this app is a rou
 The original complaint most likely was the stock screensaver: `com.xrz.screensaver` was observed waking the power group out of Dozing roughly once a second, and `com.xrz.standby/…ScreenSaveActivity` launched on every screen-off alongside our activity. That package has since been uninstalled from the test device, and the self-sleep in `scheduleSelfSleep` means the device now actually reaches `Asleep` instead of sitting `Awake` until the 10-minute screen timeout.
 
 Caveats for anyone repeating this: the battery was at 100%, so `charge_counter` never moved and `actual drain` reads 0 — the per-app split is trustworthy, the absolute mAh are not. A clean run needs the battery below ~90% and wireless debugging off, which needs a USB cable that survives bulk transfers.
-- Every redraw begins with the black→white flash for a full panel refresh; keep this in mind before adding partial-update paths.
+- The panel takes **partial** updates for the routine redraws and one full clearing pass every three hours. `LockScreenActivity` pins the window to `PARTIAL_REFRESH_MODE` (`EinkCompat.MODE_REGAL` — 16 grey levels, no flash) in `onCreate`, and `refreshDisplay()` is the entry point for every redraw but the first: it calls `updateDisplay()` alone until `FULL_REFRESH_INTERVAL_MS` has elapsed since `lastFullRefreshMs`, then promotes the redraw to `fullRefresh()`. `lastFullRefreshMs` is a companion-object field on elapsed-realtime, so the schedule survives the activity being recreated on each lock but not a process death. Activity creation always calls `fullRefresh()` directly, on the grounds that the panel is still holding another app's pixels. `MODE_DU` is the one-line fallback if REGAL smears on some firmware.
+- **Leaving the screen clears the panel.** `clearPanelOnExit()`, called from `finishOnUnlock()` and the `ACTION_FINISH` branch, fires `forceGlobalRefresh(MODE_CLEAN)` twice: once immediately, while our content is still what the panel holds, and once `EXIT_REFRESH_DELAY_MS` (400 ms) later on a handler of its own, by which point the screen behind us has drawn. Without it the ghosting accumulated since the last full refresh stays on the panel under the launcher, because nothing else on the device knows to clear it — that is what "garbage after unlock" was. Vendor path only. Both constants are the tuning knobs: raise the delay if the second pass still catches the transition, drop the immediate pass if two flashes on unlock read as one too many.
 - The update interval is a battery/ghosting trade-off, not a UI nicety — each tick costs a wake lock and a panel refresh.
 
 ### The vendor layer (`EinkCompat`)
@@ -167,7 +193,7 @@ Caveats for anyone repeating this: the battery was at 100%, so `charge_counter` 
 Two things it buys:
 
 - **Vendor brightness — reachable, and inert.** Both routes into it work from an ordinary app UID and neither touches the panel light on the HiBreak. `setScreenBrightnessLevel(int)` is just `SystemProperties.set("vendor.xrz.global_brightness_level", …)`; the write succeeds (SELinux does not block it — `setFrontlight` proves it by reading the value back), the property simply drives nothing here. `DisplayPolicyManager.setBrightnessLevelForPackage(pkg, level)` was probed with level 100: returned true, `dumpsys xrz_display_policy_service` showed `appBrightnessLevel=100`, the property did read 100 while the lock screen was on top — and `/sys/class/leds/lcd-backlight` still went 0 → 240 → 1 exactly as without it. `EinkCompat.setPackageBrightness` is kept for other models but has no caller. Separately, by the time `ACTION_SCREEN_OFF` reaches `onScreenOff()` the system has already zeroed the xrz property, so `dimFrontlight()` usually hits its `current <= 0` guard anyway. It and `restoreFrontlight()` still save the user's level in prefs (`saved_frontlight_level`, sentinel `PrefsManager.NO_SAVED_FRONTLIGHT`) so a process death can't strand it; restore paths are the unlock poll in `cancelNotificationAndFinish()` (the reliable one), `USER_PRESENT`, `ACTION_STOP`, `onDestroy`.
-- **Real panel refresh.** `forceGlobalRefresh(MODE_CLEAN)` replaces the black→white flash on the vendor path, saving two full frames and 100 ms of wake lock per launch. The window is also pinned to `MODE_GC16` via `setWindowRefreshMode`. Waveform constants (`MODE_DU`, `MODE_A2`, `MODE_REGAL`, …) are in `EinkCompat` if a partial-update path is ever wanted.
+- **Real panel refresh.** `forceGlobalRefresh(MODE_CLEAN)` replaces the black→white flash on the vendor path, saving two full frames and 100 ms of wake lock per launch. The window is pinned to `MODE_REGAL` for partial updates via `setWindowRefreshMode` — it used to be `MODE_GC16`, which is what made every clock tick flash the whole screen. Other waveform constants (`MODE_DU`, `MODE_A2`, `MODE_GC16`, …) are in `EinkCompat`.
 
 **Hidden-API enforcement blocks all of it by default.** Measured on the device: `Class.forName` on the xrz classes succeeds, but every `getMethod` throws `NoSuchMethodException` — `getScreenBrightnessLevel`, `Window.setRefreshMode` and `forceGlobalRefresh` are all invisible to an ordinary app on Android 14. With `adb shell settings put global hidden_api_policy 1` every one of them resolves and the calls go through. So the vendor path is opt-in per device (that setting, or a bypass such as `org.lsposed.hiddenapibypass`); with enforcement on, `EinkCompat` degrades to no-op and the portable paths carry the app, which is exactly what the logs show.
 

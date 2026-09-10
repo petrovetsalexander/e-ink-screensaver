@@ -6,10 +6,12 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.os.BatteryManager
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.os.VibratorManager
@@ -35,6 +37,7 @@ import com.eink.screensaver.data.WeatherFetcher
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.roundToInt
 
 class LockScreenActivity : AppCompatActivity() {
 
@@ -56,6 +59,40 @@ class LockScreenActivity : AppCompatActivity() {
         private const val UNLOCK_POLL_INTERVAL_MS = 1000L
         private const val EINK_FULL_REFRESH_DELAY_MS = 100L
 
+        /**
+         * How long after we finish the second clearing pass is due — long
+         * enough for the keyguard to have gone and the screen behind it to have
+         * drawn. Tune it here if the panel still catches the transition instead
+         * of what follows it.
+         */
+        private const val EXIT_REFRESH_DELAY_MS = 400L
+
+        /**
+         * Waveform the window is pinned to between full refreshes. REGAL keeps
+         * the 16 grey levels the book cover needs and updates only the pixels
+         * that changed, so a clock tick no longer flashes the whole panel
+         * black. [EinkCompat.MODE_DU] is the harder, faster fallback if this
+         * firmware's REGAL turns out to smear.
+         */
+        private const val PARTIAL_REFRESH_MODE = EinkCompat.MODE_REGAL
+
+        /**
+         * How long the panel may go on taking partial updates before it is owed
+         * a full clearing pass. Every partial update leaves a little ghosting
+         * behind and it accumulates; three hours of clock ticks between flashes
+         * is the trade-off this screen is tuned for.
+         */
+        private const val FULL_REFRESH_INTERVAL_MS = 3 * 60 * 60 * 1000L
+
+        /**
+         * Static so it survives the activity: the service creates a fresh
+         * instance on every lock, and a full refresh is owed against wall time,
+         * not against how many times the screen has gone off. Elapsed-realtime
+         * based, so it counts the time the device spent asleep.
+         */
+        @Volatile
+        private var lastFullRefreshMs = 0L
+
         @Volatile
         var isActive = false
             private set
@@ -67,6 +104,17 @@ class LockScreenActivity : AppCompatActivity() {
     private lateinit var clockSection: LinearLayout
     private lateinit var clockText: TextView
     private lateinit var dateText: TextView
+
+    // Battery
+    private lateinit var batteryRow: LinearLayout
+    private lateinit var batteryIcon: BatteryIndicatorView
+    private lateinit var batteryText: TextView
+
+    // Notifications
+    private lateinit var notificationsRow: LinearLayout
+    private lateinit var notifSmsText: TextView
+    private lateinit var notifTelegramText: TextView
+    private lateinit var notifCallsText: TextView
 
     // Weather
 
@@ -94,6 +142,14 @@ class LockScreenActivity : AppCompatActivity() {
     private var isPollingActive = false
     private var isPreview = false
 
+    /**
+     * Set in [onStop]: something took the foreground off us — an incoming call
+     * is the one that happens on its own — and whatever it drew is still on the
+     * panel. Coming back from that needs a clearing pass, not a partial update
+     * over someone else's pixels.
+     */
+    private var wasBackgrounded = false
+
     private val unlockPollRunnable = object : Runnable {
         override fun run() {
             if (!keyguardManager.isDeviceLocked) {
@@ -118,6 +174,7 @@ class LockScreenActivity : AppCompatActivity() {
                 }
                 ACTION_FINISH -> {
                     Log.d(TAG, "ACTION_FINISH → closing")
+                    clearPanelOnExit()
                     finish()
                 }
                 Intent.ACTION_SCREEN_OFF -> {
@@ -126,17 +183,17 @@ class LockScreenActivity : AppCompatActivity() {
                 }
                 Intent.ACTION_SCREEN_ON -> {
                     Log.d(TAG, "SCREEN_ON → start polling, update display")
-                    updateDisplay()
+                    refreshDisplay()
                     startUnlockPolling()
                     promptForUnlockIfUserWoke()
                 }
                 ScreenSaverService.ACTION_DATA_UPDATED -> {
                     Log.d(TAG, "DATA_UPDATED → refresh display")
-                    updateDisplay()
+                    refreshDisplay()
                 }
                 ACTION_UPDATE_DISPLAY -> {
                     Log.d(TAG, "UPDATE_DISPLAY → refresh display")
-                    updateDisplay()
+                    refreshDisplay()
                 }
             }
         }
@@ -209,6 +266,15 @@ class LockScreenActivity : AppCompatActivity() {
         clockText = findViewById(R.id.clockText)
         dateText = findViewById(R.id.dateText)
 
+        batteryRow = findViewById(R.id.batteryRow)
+        batteryIcon = findViewById(R.id.batteryIcon)
+        batteryText = findViewById(R.id.batteryText)
+
+        notificationsRow = findViewById(R.id.notificationsRow)
+        notifSmsText = findViewById(R.id.notifSmsText)
+        notifTelegramText = findViewById(R.id.notifTelegramText)
+        notifCallsText = findViewById(R.id.notifCallsText)
+
 
         weatherCurrentText = findViewById(R.id.weatherCurrentText)
         weatherDayNightText = findViewById(R.id.weatherDayNightText)
@@ -234,14 +300,16 @@ class LockScreenActivity : AppCompatActivity() {
 
         registerReceivers()
 
-        // Ask the panel for a full flashing waveform on every update of this window.
-        // No-op off xrz firmware, where the black→white flash in forceFullEinkRefresh()
-        // remains the only way to get one.
-        EinkCompat.setWindowRefreshMode(window, EinkCompat.MODE_GC16)
+        // Pin the window to a partial waveform. Every redraw after the one below
+        // is a clock tick or a data refresh — a few hundred pixels — and none of
+        // them are worth flashing the whole panel for. No-op off xrz firmware,
+        // where there is no waveform control and the flash in fullRefresh() is
+        // the only lever we have.
+        EinkCompat.setWindowRefreshMode(window, PARTIAL_REFRESH_MODE)
 
-        // Force full e-ink refresh: briefly show black screen, then draw content.
-        // This forces every pixel to transition (full GC16 refresh), clearing ghosting.
-        forceFullEinkRefresh()
+        // A launch always clears: the panel is still holding whatever was on
+        // screen before the lock, and no partial waveform gets rid of that.
+        fullRefresh()
 
         Log.d(TAG, "Activity created, display drawn")
     }
@@ -249,7 +317,7 @@ class LockScreenActivity : AppCompatActivity() {
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
         Log.d(TAG, "onNewIntent → updateDisplay")
-        updateDisplay()
+        refreshDisplay()
     }
 
     override fun onResume() {
@@ -272,7 +340,12 @@ class LockScreenActivity : AppCompatActivity() {
             return
         }
 
-        updateDisplay()
+        if (wasBackgrounded) {
+            wasBackgrounded = false
+            fullRefresh()
+        } else {
+            updateDisplay()
+        }
         startUnlockPolling()
     }
 
@@ -283,6 +356,7 @@ class LockScreenActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         stopUnlockPolling()
+        if (!isPreview) wasBackgrounded = true
         // The activity is singleTask, so a preview left in the background would be
         // handed to the service's next launch through onNewIntent and would keep
         // behaving like a preview — full brightness, no unlock poll. Ending it
@@ -357,6 +431,7 @@ class LockScreenActivity : AppCompatActivity() {
         // The poll is the reliable unlock signal here — USER_PRESENT proved flaky —
         // so restore the frontlight from this path too, not just from the service.
         EinkCompat.restoreFrontlight(this)
+        clearPanelOnExit()
         finish()
         @Suppress("DEPRECATION")
         overridePendingTransition(0, 0)
@@ -378,9 +453,108 @@ class LockScreenActivity : AppCompatActivity() {
         }
     }
 
-    // ════════ E-ink full refresh ════════
+    // ════════ Battery ════════
 
-    private fun forceFullEinkRefresh() {
+    /**
+     * Reads the sticky ACTION_BATTERY_CHANGED instead of registering a receiver:
+     * the panel only ever shows what the last redraw put there, so a value
+     * pulled at redraw time is exactly as fresh as the clock beside it, and
+     * nothing has to stay registered while the device sleeps.
+     */
+    private fun updateBattery() {
+        val status = registerReceiver(null, IntentFilter(Intent.ACTION_BATTERY_CHANGED))
+        val level = status?.getIntExtra(BatteryManager.EXTRA_LEVEL, -1) ?: -1
+        val scale = status?.getIntExtra(BatteryManager.EXTRA_SCALE, -1) ?: -1
+        if (status == null || level < 0 || scale <= 0) {
+            batteryRow.visibility = View.GONE
+            return
+        }
+
+        val percent = (level * 100f / scale).roundToInt().coerceIn(0, 100)
+        val charging = status.getIntExtra(BatteryManager.EXTRA_PLUGGED, 0) != 0
+
+        batteryIcon.level = percent
+        batteryText.text = if (charging) "⚡$percent%" else "$percent%"
+        batteryRow.visibility = View.VISIBLE
+    }
+
+    // ════════ Notifications ════════
+
+    /**
+     * Missed SMS, Telegram and calls, one glyph and a number each, hidden when
+     * the count is zero. The whole row goes with them, so an empty corner is
+     * genuinely empty rather than three zeroes.
+     *
+     * The counting lives in [NotificationListener]; if the user has not granted
+     * notification access it is never bound and every count stays 0.
+     */
+    private fun updateNotifications() {
+        val counts = NotificationListener.snapshot(this)
+        showCount(notifSmsText, "✉", counts.sms)
+        showCount(notifTelegramText, "✈", counts.telegram)
+        showCount(notifCallsText, "☎", counts.missedCalls)
+        notificationsRow.visibility = if (counts.isEmpty) View.GONE else View.VISIBLE
+    }
+
+    private fun showCount(view: TextView, glyph: String, count: Int) {
+        if (count <= 0) {
+            view.visibility = View.GONE
+            return
+        }
+        view.text = "$glyph $count"
+        view.visibility = View.VISIBLE
+    }
+
+    // ════════ E-ink refresh ════════
+
+    /**
+     * The entry point for every redraw that is not the activity's first. It is
+     * a plain [updateDisplay] — the window's partial waveform does the rest —
+     * until [FULL_REFRESH_INTERVAL_MS] has gone by, and then one full pass
+     * clears the ghosting the partial updates have piled up.
+     */
+    private fun refreshDisplay() {
+        val since = SystemClock.elapsedRealtime() - lastFullRefreshMs
+        if (since >= FULL_REFRESH_INTERVAL_MS) {
+            Log.d(TAG, "full refresh due (${since / 60_000} min since the last one)")
+            fullRefresh()
+        } else {
+            updateDisplay()
+        }
+    }
+
+    /**
+     * Clearing passes on the way out, which is the one moment the panel is
+     * handed to something that does not know what we did to it.
+     *
+     * Between full refreshes the window runs on a partial waveform, so by the
+     * time the user unlocks the panel is carrying whatever ghosting the clock
+     * ticks since the last clearing pass have left — and it stays there under
+     * the launcher, because nothing else on the device will clear it.
+     *
+     * Two passes: one now, while our content is still what the panel holds, and
+     * one [EXIT_REFRESH_DELAY_MS] later, by which point the screen behind us has
+     * drawn and any smearing from the transition itself goes with it. The second
+     * gets a handler of its own — the activity's is emptied in `onDestroy`, long
+     * before this is due.
+     *
+     * Vendor path only. Without the xrz framework there is no waveform to ask
+     * for, and flashing the decor view black on the way out would look worse
+     * than the ghosting it cleared.
+     */
+    private fun clearPanelOnExit() {
+        if (!EinkCompat.isSupported) return
+        lastFullRefreshMs = SystemClock.elapsedRealtime()
+        EinkCompat.forceGlobalRefresh(EinkCompat.MODE_CLEAN)
+        Handler(Looper.getMainLooper()).postDelayed(
+            { EinkCompat.forceGlobalRefresh(EinkCompat.MODE_CLEAN) },
+            EXIT_REFRESH_DELAY_MS
+        )
+    }
+
+    /** Redraw plus one clearing pass over the whole panel. */
+    private fun fullRefresh() {
+        lastFullRefreshMs = SystemClock.elapsedRealtime()
         val root = window.decorView
 
         if (EinkCompat.isSupported) {
@@ -633,6 +807,10 @@ class LockScreenActivity : AppCompatActivity() {
         } else {
             clockText.visibility = View.GONE
         }
+
+        // Battery and the missed-notification corner
+        updateBattery()
+        updateNotifications()
 
         // Date
         if (PrefsManager.isBlockClockEnabled(ctx) && PrefsManager.isShowDate(ctx)) {
