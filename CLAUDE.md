@@ -10,6 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ./gradlew installDebug       # build + install on the connected device
 ```
 
+**What ships is the debug build.** Every release is staged in `dist/` (gitignored) as `EinkScreensaver-<versionName>-debug.apk` — a straight copy of `app-debug.apk`. Do not put a release build there: `assembleRelease` produces an unsigned APK that will not install, and the debug keystore is what signed 1.0 and 1.1, so anything signed differently would need the old version uninstalled first rather than updating in place. Bumping the version means `versionCode` + `versionName` in `app/build.gradle.kts`, a copy into `dist/`, and an annotated `vX.Y.Z` tag whose message is the release notes in Russian — that tag is where the changelog lives, there is no CHANGELOG file.
+
 **Build with JDK 21.** `JAVA_HOME` on this machine points at JDK 25, which AGP 8.9 does not support; Android Studio uses its own JBR, so this only bites on the command line:
 
 ```bash
